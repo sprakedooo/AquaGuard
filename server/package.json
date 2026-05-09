@@ -1,0 +1,20 @@
+{
+  "name": "aquaguard-bridge",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "MQTT ↔ Firebase RTDB bridge for AquaGuard",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js"
+  },
+  "engines": { "node": ">=20" },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "firebase-admin": "^12.6.0",
+    "mqtt": "^5.10.1",
+    "pino": "^9.5.0",
+    "pino-pretty": "^11.3.0"
+  }
+}
