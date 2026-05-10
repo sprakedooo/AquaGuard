@@ -90,21 +90,9 @@ static void onCommand(const char* sub, const uint8_t* payload, size_t len) {
         return;
     }
 
-    if (!strcmp(sub, "cal/ph")) {
-        uint8_t  point = d["point"]      | 0;
-        uint16_t mv    = d["voltage_mv"] | 0;
-        uint8_t  p[3]  = { point, (uint8_t)(mv >> 8), (uint8_t)(mv & 0xFF) };
-        lora_link::sendDownlink(pkt::MSG_CAL_PH, p, sizeof(p));
-    }
-    else if (!strcmp(sub, "cal/turb")) {
-        uint8_t  point = d["point"]      | 0;
-        uint16_t mv    = d["voltage_mv"] | 0;
-        uint16_t ntu10 = (uint16_t)((float)(d["ntu"] | 0.0f) * 10.0f);
-        uint8_t  p[5]  = { point, (uint8_t)(mv >> 8), (uint8_t)(mv & 0xFF),
-                                  (uint8_t)(ntu10 >> 8), (uint8_t)(ntu10 & 0xFF) };
-        lora_link::sendDownlink(pkt::MSG_CAL_TURB, p, sizeof(p));
-    }
-    else if (!strcmp(sub, "cal/temp")) {
+    // cal/ph and cal/turb are handled server-side — calibration is stored in
+    // Firebase and applied by the Node.js bridge. No LoRa downlink needed.
+    if (!strcmp(sub, "cal/temp")) {
         int16_t off100 = (int16_t)((float)(d["offset_c"] | 0.0f) * 100.0f);
         uint8_t p[2] = { (uint8_t)(off100 >> 8), (uint8_t)(off100 & 0xFF) };
         lora_link::sendDownlink(pkt::MSG_CAL_TEMP_OFFSET, p, sizeof(p));
@@ -150,8 +138,15 @@ void setup() {
     alerts::begin();
     alerts::setStaleTimeout(60000);   // 1 min without telemetry → silence locally
 
-    // WiFi (blocking captive portal if no creds saved).
-    wifi_setup::autoConnect(g_settings);
+    // WiFi: if a long-press portal was requested (flag set before last reboot),
+    // run the portal directly — it starts before web_admin so port 80 is free.
+    // Otherwise autoConnect: use saved creds or run portal if none are stored.
+    if (wifi_setup::portalRequestedAtBoot()) {
+        Serial.println("Portal requested — entering WiFi setup");
+        wifi_setup::runPortal(g_settings);
+    } else {
+        wifi_setup::autoConnect(g_settings);
+    }
 
     // Reload — portal may have changed deviceId / MQTT.
     g_settings = settings::load();

@@ -1,0 +1,36 @@
+{
+  "rules": {
+    "devices": {
+      "$deviceId": {
+        // Anyone authenticated can read live data (gauges, chart, status)
+        "latest":   { ".read": "auth != null", ".write": false },
+        "meta":     { ".read": "auth != null", ".write": false },
+        "alerts":   { ".read": "auth != null", ".write": false },
+        "acks":     { ".read": "auth != null", ".write": false },
+
+        // Only admin can read the full readings history
+        "readings": { ".read": "auth != null && auth.token.admin === true", ".write": false },
+
+        // Admin can write calibration and thresholds
+        "calibration": {
+          ".read":  "auth != null",
+          ".write": "auth != null && auth.token.admin === true"
+        },
+
+        // Server (service account) writes everything; admin can read
+        ".write": "auth != null && auth.token.admin === true"
+      }
+    },
+
+    // Command queue — admin writes, server processes
+    "commands": {
+      "$deviceId": {
+        ".read":  "auth != null && auth.token.admin === true",
+        ".write": "auth != null && auth.token.admin === true"
+      }
+    },
+
+    // Deny everything else by default
+    "$other": { ".read": false, ".write": false }
+  }
+}

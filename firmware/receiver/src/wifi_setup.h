@@ -10,7 +10,12 @@ namespace wifi_setup {
     // Forced (re-)provisioning: stop normal ops, run captive portal.
     void runPortal(Settings& s);
 
-    // Call from loop(): detects long-press of BOOT button → runPortal().
+    // Check (and clear) the NVS "run portal on next boot" flag.
+    // Call once in setup() BEFORE autoConnect(); if true, call runPortal() instead.
+    bool portalRequestedAtBoot();
+
+    // Call from loop(): detects long-press of BOOT button.
+    // On long-press, sets NVS flag and reboots so portal runs before any web server.
     void pollButton(Settings& s);
 
     String apSsidFor(const String& deviceId);

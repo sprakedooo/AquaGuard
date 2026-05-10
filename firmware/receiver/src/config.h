@@ -5,8 +5,7 @@
 #define DEFAULT_DEVICE_ID   "pond-01"     // overridable via portal
 
 // ---------- Pins ----------
-#define PIN_LED_RELAY       25
-#define PIN_BUZZER_RELAY    27
+#define PIN_ALERT_RELAY     26   // single relay drives both LED + buzzer
 #define PIN_BUTTON          0
 
 #define LORA_SCK            18
@@ -14,9 +13,9 @@
 #define LORA_MOSI           23
 #define LORA_SS             5
 #define LORA_RST            14
-#define LORA_DIO0           26
+#define LORA_DIO0           2
 
-#define ALERT_ACTIVE_LEVEL  HIGH
+#define ALERT_ACTIVE_LEVEL  LOW
 
 // ---------- Radio (must match transmitter) ----------
 #define LORA_FREQ_HZ        433E6
@@ -35,5 +34,12 @@
 #define STATUS_INTERVAL_MS  30000UL
 #define BTN_AP_HOLD_MS      5000UL
 
-#define AP_SSID_PREFIX      "AquaGuard-Setup"
-#define AP_PASSWORD         "aquaguard"   // change before deployment
+#define AP_SSID_PREFIX      "AVENIDO WIFI"
+#define AP_PASSWORD         "AveniDO032109"   // change before deployment
+
+// ---------- MQTT defaults (pre-filled in portal — user only needs to enter WiFi) ----------
+#define DEF_MQTT_HOST   "5c5096ba5ead4ecf8917a53fc974ee70.s1.eu.hivemq.cloud"
+#define DEF_MQTT_PORT   8883
+#define DEF_MQTT_USER   "aquaguard-bridge"
+#define DEF_MQTT_PASS   "Gigatt02!"
+#define DEF_MQTT_TLS    true

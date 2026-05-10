@@ -7,7 +7,8 @@ export interface Reading {
   temp: number | null;
   pH: number | null;
   turb: number | null;
-  alert: AlertLevel;
+  alert: AlertLevel;        // server-computed (all 3 parameters)
+  deviceAlert?: AlertLevel; // device-reported (temperature only)
   flags: number;
   pH_mv?: number | null;
   turb_mv?: number | null;
@@ -52,7 +53,9 @@ export interface Thresholds {
   turb: VarThresh;   // *Low ignored on device side
 }
 
-export type CommandType = 'cal/ph' | 'cal/turb' | 'cal/temp' | 'threshold' | 'reboot';
+// cal/ph and cal/turb are written directly to Firebase by CalibrationWizard
+// and applied server-side — they are not sent as device commands anymore.
+export type CommandType = 'cal/temp' | 'threshold' | 'reboot';
 
 export interface CommandRecord {
   type: CommandType;

@@ -35,15 +35,17 @@ async function handleMessage(topic, buf) {
 
   try {
     if (leaf === 'telemetry') {
-      await recordTelemetry(deviceId, data);
+      const serverAlert = await recordTelemetry(deviceId, data);
 
+      // Deduplicate alert events by server-computed level (uses all 3 params)
       const prev = lastAlertByDevice.get(deviceId);
-      const cur  = data.alert ?? 0;
-      if (prev !== cur) {
-        lastAlertByDevice.set(deviceId, cur);
-        await recordAlertEvent(deviceId, cur, {
+      if (prev !== serverAlert) {
+        lastAlertByDevice.set(deviceId, serverAlert);
+        await recordAlertEvent(deviceId, serverAlert, {
           source: 'telemetry',
-          temp: data.temp ?? null, pH: data.pH ?? null, turb: data.turb ?? null,
+          temp:  data.temp  ?? null,
+          pH:    data.pH    ?? null,
+          turb:  data.turb  ?? null,
           flags: data.flags ?? 0,
         });
       }
@@ -63,12 +65,13 @@ async function handleMessage(topic, buf) {
 
 export async function startMqtt() {
   client = mqtt.connect(config.mqtt.url, {
-    clientId: config.mqtt.clientId,
-    username: config.mqtt.username,
-    password: config.mqtt.password,
-    reconnectPeriod: 2000,
-    clean: true,
-    keepalive: 30,
+    clientId:        config.mqtt.clientId,
+    username:        config.mqtt.username,
+    password:        config.mqtt.password,
+    reconnectPeriod: 5000,   // was 2000 — slower prevents HiveMQ rate-limit on rapid reconnect
+    clean:           true,
+    keepalive:       60,     // was 30 — longer heartbeat reduces timeout risk on flaky networks
+    connectTimeout:  30000,  // 30 s — allow time for TLS handshake on slow connections
   });
 
   client.on('connect', () => {

@@ -12,11 +12,11 @@ void begin() { prefs.begin(NS, false); }
 Settings load() {
     Settings s;
     s.deviceId = prefs.getString("dev",   DEFAULT_DEVICE_ID);
-    s.mqttHost = prefs.getString("mqh",   "");
-    s.mqttPort = prefs.getUShort("mqp",   1883);
-    s.mqttUser = prefs.getString("mqu",   "");
-    s.mqttPass = prefs.getString("mqpw",  "");
-    s.mqttTls  = prefs.getBool  ("mqtls", false);
+    s.mqttHost = prefs.getString("mqh",   DEF_MQTT_HOST);
+    s.mqttPort = prefs.getUShort("mqp",   DEF_MQTT_PORT);
+    s.mqttUser = prefs.getString("mqu",   DEF_MQTT_USER);
+    s.mqttPass = prefs.getString("mqpw",  DEF_MQTT_PASS);
+    s.mqttTls  = prefs.getBool  ("mqtls", DEF_MQTT_TLS);
     return s;
 }
 

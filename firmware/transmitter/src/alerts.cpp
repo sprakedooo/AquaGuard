@@ -2,17 +2,20 @@
 #include "config.h"
 #include <math.h>
 
-static pkt::AlertLevel s_level = pkt::ALERT_NORMAL;
-static uint32_t s_lastEdge = 0;
-static bool     s_ledOn    = false;
-static bool     s_buzzOn   = false;
-static uint32_t s_buzzPulseStart = 0;
+// LED and buzzer share a single relay — they activate together.
+// NORMAL   : relay off
+// WARNING  : 1 Hz blink  (500 ms on / 500 ms off)
+// CRITICAL : 4 Hz blink  (125 ms on / 125 ms off)
 
-static inline void writeLed (bool on) { digitalWrite(PIN_LED_RELAY,    on ? ALERT_ACTIVE_LEVEL : !ALERT_ACTIVE_LEVEL); }
-static inline void writeBuzz(bool on) { digitalWrite(PIN_BUZZER_RELAY, on ? ALERT_ACTIVE_LEVEL : !ALERT_ACTIVE_LEVEL); }
+static pkt::AlertLevel s_level    = pkt::ALERT_NORMAL;
+static uint32_t        s_lastEdge = 0;
+static bool            s_relayOn  = false;
+
+static inline void writeRelay(bool on) {
+    digitalWrite(PIN_ALERT_RELAY, on ? ALERT_ACTIVE_LEVEL : !ALERT_ACTIVE_LEVEL);
+}
 
 // Classify a single value against {warnLow,warnHigh,critLow,critHigh}.
-// critLow/critHigh outside warnLow/warnHigh defines the "even worse" band.
 static pkt::AlertLevel classify(float v, const VarThresh& t) {
     if (isnan(v)) return pkt::ALERT_NORMAL;
     if (v <= t.critLow || v >= t.critHigh) return pkt::ALERT_CRITICAL;
@@ -23,10 +26,8 @@ static pkt::AlertLevel classify(float v, const VarThresh& t) {
 namespace alerts {
 
 void begin() {
-    pinMode(PIN_LED_RELAY,    OUTPUT);
-    pinMode(PIN_BUZZER_RELAY, OUTPUT);
-    writeLed(false);
-    writeBuzz(false);
+    pinMode(PIN_ALERT_RELAY, OUTPUT);
+    writeRelay(false);
     s_level    = pkt::ALERT_NORMAL;
     s_lastEdge = millis();
 }
@@ -55,10 +56,8 @@ void setLevel(pkt::AlertLevel lvl) {
     if (lvl == s_level) return;
     s_level    = lvl;
     s_lastEdge = millis();
-    s_ledOn    = false;
-    s_buzzOn   = false;
-    writeLed(false);
-    writeBuzz(false);
+    s_relayOn  = false;
+    writeRelay(false);
 }
 
 pkt::AlertLevel current() { return s_level; }
@@ -67,35 +66,27 @@ void tick() {
     uint32_t now = millis();
 
     switch (s_level) {
-    case pkt::ALERT_NORMAL: {
-        if (s_ledOn)  { s_ledOn = false;  writeLed(false); }
-        if (s_buzzOn) { s_buzzOn = false; writeBuzz(false); }
+    case pkt::ALERT_NORMAL:
+        if (s_relayOn) { s_relayOn = false; writeRelay(false); }
         return;
-    }
+
     case pkt::ALERT_WARNING: {
-        // 1 Hz LED (500 ms on / 500 ms off)
-        const uint32_t period = 500;
-        if (now - s_lastEdge >= period) {
+        // 1 Hz blink — 500 ms on / 500 ms off
+        if (now - s_lastEdge >= 500) {
             s_lastEdge = now;
-            s_ledOn = !s_ledOn;
-            writeLed(s_ledOn);
+            s_relayOn  = !s_relayOn;
+            writeRelay(s_relayOn);
         }
-        // Short buzzer chirp (80 ms) every 5 s
-        const uint32_t chirpEvery = 5000, chirpLen = 80;
-        uint32_t phase = now % chirpEvery;
-        bool wantBuzz = (phase < chirpLen);
-        if (wantBuzz != s_buzzOn) { s_buzzOn = wantBuzz; writeBuzz(wantBuzz); }
         return;
     }
+
     case pkt::ALERT_CRITICAL: {
-        // 4 Hz LED (125 ms on / 125 ms off), continuous buzzer
-        const uint32_t period = 125;
-        if (now - s_lastEdge >= period) {
+        // 4 Hz blink — 125 ms on / 125 ms off
+        if (now - s_lastEdge >= 125) {
             s_lastEdge = now;
-            s_ledOn = !s_ledOn;
-            writeLed(s_ledOn);
+            s_relayOn  = !s_relayOn;
+            writeRelay(s_relayOn);
         }
-        if (!s_buzzOn) { s_buzzOn = true; writeBuzz(true); }
         return;
     }
     }

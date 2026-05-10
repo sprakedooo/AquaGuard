@@ -61,8 +61,8 @@ static String renderIndex() {
     html += "</p>";
     if (s_status.lastSeenMs) {
         html += "<p>Temp: <b>" + String(s_status.lastTempC, 2) + " &deg;C</b><br>";
-        html += "pH: <b>" + String(s_status.lastPh, 2) + "</b><br>";
-        html += "Turbidity: <b>" + String(s_status.lastTurbNTU, 1) + " NTU</b><br>";
+        html += "pH: <b>" + (isnan(s_status.lastPh) ? String("N/A (server-computed)") : String(s_status.lastPh, 2)) + "</b><br>";
+        html += "Turbidity: <b>" + (isnan(s_status.lastTurbNTU) ? String("N/A (server-computed)") : String(s_status.lastTurbNTU, 1) + " NTU") + "</b><br>";
         html += "RSSI/SNR: " + String(s_status.lastRssi) + " dBm / " + String(s_status.lastSnr, 1) + " dB<br>";
         html += "Last uplink: " + String(since) + " s ago</p>";
     } else {

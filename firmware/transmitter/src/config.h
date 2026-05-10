@@ -7,10 +7,9 @@
 
 // ---------- Pins ----------
 #define PIN_DS18B20          4
-#define PIN_PH_ADC           34
-#define PIN_TURB_ADC         35
-#define PIN_LED_RELAY        25
-#define PIN_BUZZER_RELAY     27
+#define PIN_PH_ADC           35
+#define PIN_TURB_ADC         32
+#define PIN_ALERT_RELAY      26   // single relay drives both LED + buzzer
 #define PIN_BUTTON           0
 
 // LoRa Ra-02 (SX1278) on VSPI
@@ -19,10 +18,10 @@
 #define LORA_MOSI            23
 #define LORA_SS              5
 #define LORA_RST             14
-#define LORA_DIO0            26
+#define LORA_DIO0            2
 
 // Active level for relay-driven LED/buzzer (set to LOW if your relay is active-LOW)
-#define ALERT_ACTIVE_LEVEL   HIGH
+#define ALERT_ACTIVE_LEVEL   LOW
 
 // ---------- Radio config (must match receiver) ----------
 #define LORA_FREQ_HZ         433E6   // change to 868E6 / 915E6 per your region
@@ -34,7 +33,7 @@
 #define LORA_PREAMBLE_LEN    8
 
 // ---------- Timing ----------
-#define SAMPLE_INTERVAL_MS   10000UL
+#define SAMPLE_INTERVAL_MS   2000UL
 #define STATUS_INTERVAL_MS   30000UL
 
 // ---------- ADC ----------
@@ -58,14 +57,20 @@
 #define DEF_TURB_CRIT_HIGH   150.0f
 
 // ---------- Calibration defaults ----------
-// pH: typical generic probe outputs ~2.5 V at pH 7, slope ~ -59 mV/pH at 25 °C
-#define DEF_PH_V7_MV         2500
-#define DEF_PH_V4_MV         3000   // V4 > V7 because slope is negative
+// pH probe through 10k/20k voltage divider from 5V sensor:
+//   pH 7 ~2.5V sensor → ADC sees ~1667 mV  (2500 × 20/30)
+//   pH 4 ~3.0V sensor → ADC sees ~2000 mV  (3000 × 20/30)
+// Always calibrate with pH 7 and pH 4 buffer solutions before use.
+#define DEF_PH_V7_MV         1667
+#define DEF_PH_V4_MV         2000   // V4 > V7 because slope is negative
 
-// Turbidity (DFRobot SEN0189): clear water ~3.0 V, dirty ~1.5 V. NTU non-linear,
-// but linearised between two points is fine for fishpond range.
+// Turbidity (DFRobot SEN0189) through 10k/20k voltage divider from 5V sensor:
+//   clear water ~4.5V sensor → ADC sees ~3000 mV  (4500 × 20/30)
+//   very dirty  ~1.5V sensor → ADC sees ~1000 mV  (1500 × 20/30)
+// These are starting defaults only — always run the calibration wizard before use.
+// The sensor reports 0 NTU (no alerts) until calibratedAt is set by the wizard.
 #define DEF_TURB_V_CLEAR_MV  3000
-#define DEF_TURB_V_DIRTY_MV  1500
+#define DEF_TURB_V_DIRTY_MV  1000
 #define DEF_TURB_NTU_DIRTY   1000.0f
 
 // ---------- Misc ----------

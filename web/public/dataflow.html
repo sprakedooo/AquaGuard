@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AquaGuard — Data Flow</title>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #f1f5f9;
+      min-height: 100vh;
+      padding: 32px 16px;
+    }
+    h1 {
+      text-align: center;
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: #0f172a;
+      margin-bottom: 6px;
+    }
+    p.sub {
+      text-align: center;
+      color: #64748b;
+      font-size: 0.875rem;
+      margin-bottom: 28px;
+    }
+    .card {
+      background: #fff;
+      border-radius: 16px;
+      box-shadow: 0 2px 16px rgba(0,0,0,0.08);
+      padding: 32px;
+      max-width: 1100px;
+      margin: 0 auto 32px;
+      overflow-x: auto;
+    }
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      justify-content: center;
+      max-width: 1100px;
+      margin: 0 auto;
+    }
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: #fff;
+      border-radius: 8px;
+      padding: 8px 14px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.07);
+      font-size: 0.82rem;
+      color: #334155;
+    }
+    .dot {
+      width: 14px; height: 14px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+  </style>
+</head>
+<body>
+  <h1>🐟 AquaGuard — System Data Flow</h1>
+  <p class="sub">Water quality monitoring for fish ponds &amp; cages</p>
+
+  <div class="card">
+    <div class="mermaid">
+flowchart TD
+    subgraph POND["🐟 Fish Pond / Cage"]
+        DS["🌡️ DS18B20\nTemperature"]
+        PH["🧪 pH Probe\nAnalog ADC"]
+        TB["💧 Turbidity Sensor\nAnalog ADC"]
+    end
+
+    subgraph TX["📡 Transmitter ESP32"]
+        SENS["sensors::read()\n16-sample ADC avg\npH temp compensation"]
+        CAL["Apply Calibration\nfrom NVS flash"]
+        ALT["alerts::evaluate()\nclassify vs thresholds\nset flags byte"]
+        PKT["pkt::encode()\n17-byte LoRa packet\nCRC16-CCITT"]
+        RELAY_TX["⚡ Relay\nLED + Buzzer"]
+        NVS["💾 NVS Flash\nThresholds\nCal data"]
+    end
+
+    subgraph RADIO["📻 LoRa Radio — 433 MHz · SF7 · ~1 km"]
+        UP["⬆ Uplink\nTelemetry · ACK"]
+        DOWN["⬇ Downlink\nCommands · Cal · Thresholds"]
+    end
+
+    subgraph RX["📶 Receiver ESP32"]
+        DECODE["pkt::decode()\nvalidate CRC"]
+        MJSON["Build JSON payload"]
+        MQTT_PUB["mqtt_link::publish()\naqguard/pond-01/telemetry\naqguard/pond-01/status\naqguard/pond-01/alert"]
+        RELAY_RX["⚡ Relay\nLED + Buzzer"]
+    end
+
+    subgraph BROKER["☁️ HiveMQ Cloud — mqtts:// port 8883"]
+        MQ[("MQTT Broker")]
+    end
+
+    subgraph BRIDGE["🖥️ Node.js Bridge Server"]
+        MSUB["mqtt.js\nsubscribe all topics"]
+        HAND["handleMessage()\nedge-detect alerts"]
+        FBW["firebase.js\nAdmin SDK"]
+        CMDR["commands.js\nclaim pending commands"]
+    end
+
+    subgraph RTDB["🔥 Firebase Realtime Database"]
+        LAT["devices/pond-01/latest"]
+        READ["devices/pond-01/readings/*"]
+        META["devices/pond-01/meta"]
+        ALDB["devices/pond-01/alerts/*"]
+        CMDS["commands/pond-01/*\npending → sending → sent"]
+    end
+
+    subgraph WEB["🌐 React Dashboard — port 5173"]
+        AUTH["🔐 Firebase Auth\nemail + password"]
+        HKS["Realtime Hooks\nuseDeviceLatest\nuseReadings\nuseAlerts\nuseThresholds"]
+        DASH["📊 Dashboard\nGauges · Chart · AlertsLog\nConnectionCard"]
+        ADM["🔧 Admin Only\nThresholdEditor\nCalibrationWizard"]
+        CMD["issueCommand()\npush to /commands"]
+    end
+
+    DS & PH & TB --> SENS
+    SENS --> CAL --> ALT
+    ALT --> PKT
+    ALT -->|"WARNING: 1 Hz blink\nCRITICAL: 4 Hz blink"| RELAY_TX
+    PKT --> UP --> DECODE --> MJSON --> MQTT_PUB
+    ALT -->|alert level| RELAY_RX
+    MQTT_PUB -->|TLS| MQ
+    MQ --> MSUB --> HAND --> FBW
+    FBW --> LAT & READ & META & ALDB
+    LAT & READ & META & ALDB --> HKS
+    AUTH --> HKS --> DASH
+    HKS --> ADM
+    ADM --> CMD --> CMDS --> CMDR
+    CMDR -->|"MQTT publish\ncmd/threshold\ncmd/cal/*"| MQ
+    MQ --> RX --> DOWN --> TX
+    TX -->|"storage::save*()"| NVS
+    NVS -.->|"load on boot"| CAL
+
+    classDef pond fill:#e0f2fe,stroke:#0284c7,color:#0c4a6e
+    classDef esp fill:#fef9c3,stroke:#ca8a04,color:#713f12
+    classDef broker fill:#f0fdf4,stroke:#16a34a,color:#14532d
+    classDef firebase fill:#fff7ed,stroke:#ea580c,color:#7c2d12
+    classDef web fill:#faf5ff,stroke:#9333ea,color:#581c87
+    classDef bridge fill:#f8fafc,stroke:#475569,color:#1e293b
+
+    class DS,PH,TB pond
+    class SENS,CAL,ALT,PKT,RELAY_TX,NVS,DECODE,MJSON,MQTT_PUB,RELAY_RX esp
+    class MQ,BROKER broker
+    class LAT,READ,META,ALDB,CMDS firebase
+    class AUTH,HKS,DASH,ADM,CMD web
+    class MSUB,HAND,FBW,CMDR bridge
+    </div>
+  </div>
+
+  <div class="legend">
+    <div class="legend-item"><div class="dot" style="background:#0284c7"></div>Fish Pond Sensors</div>
+    <div class="legend-item"><div class="dot" style="background:#ca8a04"></div>ESP32 Firmware (TX &amp; RX)</div>
+    <div class="legend-item"><div class="dot" style="background:#16a34a"></div>HiveMQ Cloud Broker</div>
+    <div class="legend-item"><div class="dot" style="background:#475569"></div>Node.js Bridge Server</div>
+    <div class="legend-item"><div class="dot" style="background:#ea580c"></div>Firebase Realtime Database</div>
+    <div class="legend-item"><div class="dot" style="background:#9333ea"></div>React Web Dashboard</div>
+  </div>
+
+  <script>
+    mermaid.initialize({ startOnLoad: true, theme: 'default', flowchart: { curve: 'basis', padding: 20 } });
+  </script>
+</body>
+</html>
