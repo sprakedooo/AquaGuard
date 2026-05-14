@@ -36,13 +36,13 @@ float readTemperatureC() {
     return ds18b20.getTempCByIndex(0);
 }
 
-Reading read(const TempCal& tempCal) {
+Reading read() {
     Reading r{};
 
-    // Temperature — still computed on device with offset applied.
+    // Temperature — DS18B20 is factory-trimmed; no offset applied.
     float t = readTemperatureC();
     r.tempOk      = (t > -50.0f && t < 100.0f);
-    r.temperatureC = r.tempOk ? (t + tempCal.offsetC) : NAN;
+    r.temperatureC = r.tempOk ? t : NAN;
 
     // pH and turbidity — send raw mV only; server applies calibration formula.
     // Upper limit 3400 mV accounts for 5V sensor through 10k/20k voltage divider

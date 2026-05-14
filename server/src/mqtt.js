@@ -68,12 +68,16 @@ export async function startMqtt() {
     clientId:        config.mqtt.clientId,
     username:        config.mqtt.username,
     password:        config.mqtt.password,
-    reconnectPeriod: 5000,   // was 2000 — slower prevents HiveMQ rate-limit on rapid reconnect
+    reconnectPeriod: 5000,   // slower reconnect prevents broker rate-limiting
     clean:           true,
-    keepalive:       60,     // was 30 — longer heartbeat reduces timeout risk on flaky networks
+    keepalive:       60,     // longer heartbeat reduces timeout risk on flaky networks
     connectTimeout:  30000,  // 30 s — allow time for TLS handshake on slow connections
+    resubscribe:     false,  // we re-subscribe manually on every connect (see below)
   });
 
+  // Re-subscribe on EVERY (re)connect — mqtt.js's auto-resubscribe sometimes
+  // returns granted:[] after a brief broker outage, silently breaking the bridge.
+  // Calling subscribe ourselves with no internal state guarantees a fresh SUBACK.
   client.on('connect', () => {
     logger.info({ url: config.mqtt.url }, 'MQTT connected');
     const subs = [
@@ -83,8 +87,13 @@ export async function startMqtt() {
       `${PREFIX}/+/ack`,
     ];
     client.subscribe(subs, { qos: 1 }, (err, granted) => {
-      if (err) logger.error({ err }, 'MQTT subscribe failed');
-      else     logger.info({ granted }, 'MQTT subscribed');
+      if (err) {
+        logger.error({ err }, 'MQTT subscribe failed');
+      } else if (!granted || granted.length === 0) {
+        logger.error('MQTT SUBACK returned empty granted list — broker may be misbehaving');
+      } else {
+        logger.info({ granted }, 'MQTT subscribed');
+      }
     });
   });
 

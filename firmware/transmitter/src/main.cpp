@@ -7,22 +7,14 @@
 #include "lora_link.h"
 
 // pH and turbidity calibration moved to Firebase / server-side.
-// Only temperature offset and thresholds remain on the device.
-static TempCal     g_tempCal;
+// DS18B20 is factory-trimmed so temperature has no field calibration either.
+// Only alert thresholds remain on the device.
 static Thresholds  g_th;
 
 static uint8_t  g_seq        = 0;
 static uint32_t g_lastSample = 0;
 
 // ---------- Downlink dispatch ----------
-
-static void handleCalTempOffset(const uint8_t* p, uint8_t n) {
-    if (n != 2) return;
-    int16_t off_x100 = (int16_t)(((uint16_t)p[0] << 8) | p[1]);
-    g_tempCal.offsetC      = off_x100 / 100.0f;
-    g_tempCal.calibratedAt = millis() / 1000;
-    storage::saveTempCal(g_tempCal);
-}
 
 static void handleSetThreshold(const uint8_t* p, uint8_t n) {
     // [var u8] [warnLow i16] [warnHigh i16] [critLow i16] [critHigh i16] (×100 or ×10)
@@ -48,17 +40,17 @@ static void handleSetThreshold(const uint8_t* p, uint8_t n) {
 static void onDownlink(uint8_t msgType, uint8_t seq, const uint8_t* payload, uint8_t plen) {
     uint8_t status = 0;
     switch (msgType) {
-        // cal/ph and cal/turb commands are intentionally ignored — calibration
-        // is now stored in Firebase and applied on the server.
-        case pkt::MSG_CAL_TEMP_OFFSET: handleCalTempOffset(payload, plen); break;
-        case pkt::MSG_SET_THRESHOLD:   handleSetThreshold(payload, plen);  break;
+        // cal/ph, cal/turb, cal/temp are intentionally ignored:
+        //   - pH/turbidity calibration is stored in Firebase and applied server-side
+        //   - DS18B20 needs no field calibration (factory-trimmed)
+        case pkt::MSG_SET_THRESHOLD: handleSetThreshold(payload, plen); break;
         case pkt::MSG_REBOOT:
             lora_link::sendAck(seq, msgType, 0);
             delay(100);
             ESP.restart();
             return;
         default:
-            status = 1;  // unknown / not handled
+            status = 1;  // unknown / not handled (incl. legacy cal/* opcodes)
     }
     lora_link::sendAck(seq, msgType, status);
 }
@@ -73,7 +65,8 @@ void setup() {
     pinMode(PIN_BUTTON, INPUT_PULLUP);
 
     storage::begin();
-    storage::loadAll(g_tempCal, g_th);
+    storage::purgeLegacyTempCal();    // wipe stale offset from previous firmware
+    storage::loadAll(g_th);
 
     sensors::begin();
     alerts::begin();
@@ -96,7 +89,7 @@ void loop() {
     if (now - g_lastSample >= SAMPLE_INTERVAL_MS) {
         g_lastSample = now;
 
-        Reading r = sensors::read(g_tempCal);
+        Reading r = sensors::read();
 
         // Alert evaluation: only temperature is computed locally.
         // pH and turbidity are NAN so classify() returns NORMAL for them.

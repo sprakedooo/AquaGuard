@@ -14,9 +14,10 @@ import { logger } from './logger.js';
 // We only act on "pending" rows. To prevent races between concurrent bridge
 // instances, we transactionally claim each row by setting status → "sending".
 
-// cal/ph and cal/turb are no longer forwarded to the device — calibration is
-// stored directly in Firebase by the dashboard and applied by the bridge.
-const ALLOWED_TYPES = new Set(['cal/temp', 'threshold', 'reboot']);
+// cal/ph and cal/turb are not forwarded to the device — calibration is stored
+// directly in Firebase by the dashboard and applied server-side by the bridge.
+// cal/temp removed: DS18B20 needs no field calibration on this hardware.
+const ALLOWED_TYPES = new Set(['threshold', 'reboot']);
 
 async function claim(snapRef) {
   const result = await snapRef.transaction((cur) => {

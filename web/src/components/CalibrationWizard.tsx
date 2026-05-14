@@ -1,14 +1,12 @@
 import { useState } from 'react';
 import { ref, set } from 'firebase/database';
 import type { Reading } from '../types';
-import { issueCommand } from '../lib/commands';
 import { db } from '../firebase';
 import { useAuth } from '../auth/AuthProvider';
-import { fmt } from '../lib/format';
 
 interface Props { deviceId: string; latest: Reading | null; }
 
-type Tab = 'ph' | 'turb' | 'temp';
+type Tab = 'ph' | 'turb';
 
 export default function CalibrationWizard({ deviceId, latest }: Props) {
   const { isAdmin } = useAuth();
@@ -33,19 +31,6 @@ export default function CalibrationWizard({ deviceId, latest }: Props) {
     }
   }
 
-  // Temperature offset still goes to the device via LoRa downlink (applied locally).
-  async function sendTempOffset(payload: Record<string, unknown>, label: string) {
-    setBusy(true); setMsg('');
-    try {
-      await issueCommand(deviceId, 'cal/temp', payload);
-      setMsg(`✓ ${label} sent to device — applying…`);
-    } catch (e) {
-      setMsg(e instanceof Error ? e.message : 'Send failed');
-    } finally {
-      setBusy(false);
-    }
-  }
-
   const TabBtn = ({ id, label }: { id: Tab; label: string }) => (
     <button onClick={() => setTab(id)}
             className={`px-3 py-1.5 text-sm rounded ${tab === id
@@ -63,12 +48,10 @@ export default function CalibrationWizard({ deviceId, latest }: Props) {
       <div className="flex gap-2 mb-4">
         <TabBtn id="ph"   label="pH (2-point)" />
         <TabBtn id="turb" label="Turbidity"    />
-        <TabBtn id="temp" label="Temperature"  />
       </div>
 
       {tab === 'ph'   && <PhPanel   latest={latest} disabled={!isAdmin || busy} onSave={saveCalToFirebase} />}
       {tab === 'turb' && <TurbPanel latest={latest} disabled={!isAdmin || busy} onSave={saveCalToFirebase} />}
-      {tab === 'temp' && <TempPanel latest={latest} disabled={!isAdmin || busy} onSend={sendTempOffset}    />}
 
       {msg && <p className="mt-3 text-xs text-slate-600">{msg}</p>}
     </div>
@@ -160,47 +143,6 @@ function TurbPanel({ latest, disabled, onSave }: {
           Save both points to cloud
         </button>
       )}
-    </div>
-  );
-}
-
-// ---------- Temperature ----------
-function TempPanel({ latest, disabled, onSend }: {
-  latest: Reading | null; disabled: boolean;
-  onSend: (payload: Record<string, unknown>, label: string) => Promise<void>;
-}) {
-  const [reference, setReference] = useState<number>(25);
-  const measured = latest?.temp ?? null;
-  const offset   = measured == null ? null : Number((reference - measured).toFixed(2));
-
-  return (
-    <div className="space-y-3 text-sm">
-      <p className="text-slate-600">
-        Compare against a trusted thermometer in the same water. The offset is sent to
-        the device via LoRa and applied to all future readings before transmission.
-      </p>
-      <div className="grid grid-cols-2 gap-3">
-        <div>
-          <label className="block text-xs text-slate-500">Reference temp (°C)</label>
-          <input type="number" value={reference} step={0.1}
-                 onChange={(e) => setReference(Number(e.target.value))}
-                 className="w-full rounded border border-slate-300 px-2 py-1 text-sm tabular-nums" />
-        </div>
-        <div>
-          <div className="text-xs text-slate-500">Measured</div>
-          <div className="px-2 py-1 tabular-nums">{fmt(measured, 2, ' °C')}</div>
-        </div>
-      </div>
-      <div className="text-sm">
-        Offset: <b className="tabular-nums">
-          {offset == null ? '—' : `${offset > 0 ? '+' : ''}${offset} °C`}
-        </b>
-      </div>
-      <button disabled={disabled || offset == null}
-              onClick={() => onSend({ offset_c: offset }, `temperature offset ${offset}°C`)}
-              className="px-3 py-2 rounded bg-slate-900 text-white disabled:opacity-50 hover:bg-slate-800">
-        Send offset to device
-      </button>
     </div>
   );
 }

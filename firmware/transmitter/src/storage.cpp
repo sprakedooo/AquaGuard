@@ -11,10 +11,7 @@ void begin() {
     prefs.begin(NS, false);
 }
 
-void loadAll(TempCal& te, Thresholds& th) {
-    te.offsetC      = prefs.getFloat ("te_off", 0.0f);
-    te.calibratedAt = prefs.getULong ("te_t",   0);
-
+void loadAll(Thresholds& th) {
     th.temp.warnLow  = prefs.getFloat("t_twl", DEF_TEMP_WARN_LOW);
     th.temp.warnHigh = prefs.getFloat("t_twh", DEF_TEMP_WARN_HIGH);
     th.temp.critLow  = prefs.getFloat("t_tcl", DEF_TEMP_CRIT_LOW);
@@ -33,11 +30,6 @@ void loadAll(TempCal& te, Thresholds& th) {
     th.turb.critHigh = prefs.getFloat("t_uch", DEF_TURB_CRIT_HIGH);
 }
 
-void saveTempCal(const TempCal& v) {
-    prefs.putFloat("te_off", v.offsetC);
-    prefs.putULong("te_t",   v.calibratedAt);
-}
-
 void saveThresholds(const Thresholds& v) {
     prefs.putFloat("t_twl", v.temp.warnLow);
     prefs.putFloat("t_twh", v.temp.warnHigh);
@@ -51,6 +43,14 @@ void saveThresholds(const Thresholds& v) {
 
     prefs.putFloat("t_uwh", v.turb.warnHigh);
     prefs.putFloat("t_uch", v.turb.critHigh);
+}
+
+void purgeLegacyTempCal() {
+    // Remove old keys from when the device applied a temperature offset locally.
+    // Preferences.remove() is a no-op if the key doesn't exist, so this is safe
+    // on freshly-flashed boards too.
+    prefs.remove("te_off");
+    prefs.remove("te_t");
 }
 
 } // namespace storage

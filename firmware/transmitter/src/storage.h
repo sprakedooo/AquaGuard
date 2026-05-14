@@ -1,13 +1,9 @@
 #pragma once
 #include <Arduino.h>
 
-// pH and turbidity calibration is now stored in Firebase and computed on the
-// server. Only temperature offset and alert thresholds remain on the device.
-
-struct TempCal {
-    float    offsetC;
-    uint32_t calibratedAt;
-};
+// pH and turbidity calibration is stored in Firebase and computed on the
+// server. Temperature has no field calibration (DS18B20 is factory-trimmed).
+// Only alert thresholds remain on the device for the local LED/buzzer relay.
 
 struct VarThresh {
     float warnLow, warnHigh, critLow, critHigh;
@@ -21,8 +17,11 @@ struct Thresholds {
 
 namespace storage {
     void begin();
-    void loadAll(TempCal& te, Thresholds& th);
+    void loadAll(Thresholds& th);
 
-    void saveTempCal(const TempCal& v);
     void saveThresholds(const Thresholds& v);
+
+    // Wipe stale TempCal keys left over from older firmware versions.
+    // Called once at boot; idempotent — does nothing if the keys don't exist.
+    void purgeLegacyTempCal();
 }

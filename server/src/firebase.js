@@ -32,18 +32,24 @@ async function readThresholds(deviceId) {
 
 // ---------- Server-side sensor computation ----------
 
-// Nernst equation: pH = 7 + (V7 - Vmeas) / slope(T)
+// Two-point linear interpolation between (v7, pH 7) and (v4, pH 4), with
+// Nernst temperature correction applied to the slope.
+//
+//   pH_meas = 7 + (V_meas - V7) / slopeRef
+//
+// slopeRef = (V4 - V7) / (4 - 7) = mV per pH unit (negative for "standard"
+// analog modules where high V = high pH, positive for inverted modules).
 function computePh(pH_mv, tempC, phCal) {
   if (!phCal?.v7_mv || !phCal?.v4_mv) return null;
   const v7 = phCal.v7_mv;
   const v4 = phCal.v4_mv;
-  let slopeRef = (v4 - v7) / (4 - 7); // mV/pH at ~25°C, typically negative
-  if (Math.abs(slopeRef) < 1) slopeRef = -167;  // sanity fallback
+  let slopeRef = (v4 - v7) / (4 - 7); // mV/pH
+  if (Math.abs(slopeRef) < 1) slopeRef = -167;  // sanity fallback if cal is degenerate
 
   const tK    = (typeof tempC === 'number' && tempC > -50) ? tempC + 273.15 : 298.15;
   const slope = slopeRef * (tK / 298.15);
 
-  let pH = 7 + (v7 - pH_mv) / slope;
+  let pH = 7 + (pH_mv - v7) / slope;
   if (pH < 0)  pH = 0;
   if (pH > 14) pH = 14;
   return Math.round(pH * 100) / 100;

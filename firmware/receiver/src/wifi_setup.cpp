@@ -3,6 +3,8 @@
 #include <WiFi.h>
 #include <WiFiManager.h>
 #include <Preferences.h>
+#include "lwip/dns.h"      // direct lwIP DNS API — set DNS servers after connect
+#include "esp_wifi.h"      // esp_wifi_set_ps for hard power-save disable
 
 static uint32_t s_btnDownAt = 0;
 static const char* SYS_NS = "aqgsys";   // NVS namespace for system flags
@@ -65,8 +67,7 @@ static void runPortalInternal(Settings& s, bool forced) {
         : wm.autoConnect      (apSsid.c_str(), AP_PASSWORD);
 
     if (ok) {
-        // WiFi is now connected.  Save whatever the user typed into the fields
-        // (may be unchanged from defaults if they only configured WiFi creds).
+        // WiFi is connected. Save whatever the user typed into the fields.
         s.deviceId = p_dev.getValue();
         s.mqttHost = p_host.getValue();
         s.mqttPort = (uint16_t)atoi(p_port.getValue());
@@ -75,13 +76,34 @@ static void runPortalInternal(Settings& s, bool forced) {
         s.mqttTls  = (String(p_tls.getValue()) == "1");
         if (s.mqttPort == 0) s.mqttPort = 1883;
         settings::save(s);
+
+        // WiFiManager leaves the AP running in dual STA+AP mode after connecting.
+        // Shut the AP down WITHOUT changing WiFi mode — WiFi.mode(WIFI_STA) triggers
+        // a DHCP renew that sometimes loses the gateway, breaking internet routing.
+        WiFi.softAPdisconnect(false);  // stop broadcasting AP without tearing down interface
+        WiFi.setSleep(false);          // disable power-saving sleep — keeps connection stable
+
+        // Override DNS with Google's servers (8.8.8.8 / 8.8.4.4).
+        // Some home routers don't provide a working DNS server to ESP32 via DHCP,
+        // causing EHOSTUNREACH (errno 113) when the firmware tries to resolve
+        // the HiveMQ Cloud hostname before opening the TLS socket.
+        {
+            ip_addr_t dns1, dns2;
+            IP4_ADDR(&dns1.u_addr.ip4, 8, 8, 8, 8);
+            dns1.type = IPADDR_TYPE_V4;
+            IP4_ADDR(&dns2.u_addr.ip4, 8, 8, 4, 4);
+            dns2.type = IPADDR_TYPE_V4;
+            dns_setserver(0, &dns1);
+            dns_setserver(1, &dns2);
+            Serial.println("DNS overridden to 8.8.8.8 / 8.8.4.4");
+        }
+
         Serial.printf("WiFi connected. IP=%s  MQTT=%s:%u  device=%s\n",
                       WiFi.localIP().toString().c_str(),
                       s.mqttHost.c_str(), s.mqttPort, s.deviceId.c_str());
     } else {
         // Portal timed out (auto mode only — forced never times out).
-        // Don't restart in a tight loop; just continue and let MQTT fail gracefully.
-        // The device will function for LoRa reception; MQTT will be offline.
+        // Continue without WiFi rather than restarting in a tight loop.
         Serial.println("WiFi portal timed out — continuing without WiFi.");
     }
 }

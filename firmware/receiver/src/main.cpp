@@ -77,11 +77,12 @@ static void onUplink(const lora_link::UplinkMeta& m, const uint8_t* p, uint8_t p
 
 // ---------- MQTT command → LoRa downlink ----------
 // Sub-topics under aquaguard/{id}/cmd/...
-//   cal/ph         {"point":4|7,"voltage_mv":2487}
-//   cal/turb       {"point":0|1,"voltage_mv":...,"ntu":...}
-//   cal/temp       {"offset_c":-0.3}
-//   threshold      {"var":"temp"|"ph"|"turb","warnLow":..,"warnHigh":..,"critLow":..,"critHigh":..}
-//   reboot         {}
+//   threshold  {"var":"temp"|"ph"|"turb","warnLow":..,"warnHigh":..,"critLow":..,"critHigh":..}
+//   reboot     {}
+//
+// Calibration commands (cal/ph, cal/turb, cal/temp) are NOT forwarded to the
+// device — pH/turb calibration lives in Firebase and is applied server-side;
+// DS18B20 needs no field calibration.
 static void onCommand(const char* sub, const uint8_t* payload, size_t len) {
     JsonDocument d;
     DeserializationError err = deserializeJson(d, payload, len);
@@ -90,14 +91,7 @@ static void onCommand(const char* sub, const uint8_t* payload, size_t len) {
         return;
     }
 
-    // cal/ph and cal/turb are handled server-side — calibration is stored in
-    // Firebase and applied by the Node.js bridge. No LoRa downlink needed.
-    if (!strcmp(sub, "cal/temp")) {
-        int16_t off100 = (int16_t)((float)(d["offset_c"] | 0.0f) * 100.0f);
-        uint8_t p[2] = { (uint8_t)(off100 >> 8), (uint8_t)(off100 & 0xFF) };
-        lora_link::sendDownlink(pkt::MSG_CAL_TEMP_OFFSET, p, sizeof(p));
-    }
-    else if (!strcmp(sub, "threshold")) {
+    if (!strcmp(sub, "threshold")) {
         const char* var = d["var"] | "";
         uint8_t v = (!strcmp(var, "temp")) ? 0 : (!strcmp(var, "ph")) ? 1 : (!strcmp(var, "turb")) ? 2 : 0xFF;
         if (v == 0xFF) return;

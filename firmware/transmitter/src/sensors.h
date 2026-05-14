@@ -1,9 +1,8 @@
 #pragma once
 #include <Arduino.h>
-#include "storage.h"
 
 struct Reading {
-    float    temperatureC;   // DS18B20 + offset applied on device
+    float    temperatureC;   // raw DS18B20 reading (no field calibration)
     float    pH;             // NAN — computed server-side from pH_mv
     float    turbidityNTU;   // NAN — computed server-side from turb_mv
     uint16_t pH_mv;          // raw probe voltage sent to server for computation
@@ -16,8 +15,9 @@ struct Reading {
 namespace sensors {
     void begin();
 
-    // Only TempCal needed on device; pH/turbidity cal lives in Firebase.
-    Reading read(const TempCal& tempCal);
+    // No calibration parameter needed — DS18B20 is factory-trimmed, pH/turb
+    // calibration is applied server-side.
+    Reading read();
 
     uint16_t readPhMilliVolts();
     uint16_t readTurbMilliVolts();

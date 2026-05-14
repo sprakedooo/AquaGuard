@@ -54,8 +54,9 @@ export interface Thresholds {
 }
 
 // cal/ph and cal/turb are written directly to Firebase by CalibrationWizard
-// and applied server-side — they are not sent as device commands anymore.
-export type CommandType = 'cal/temp' | 'threshold' | 'reboot';
+// and applied server-side — they are not sent as device commands.
+// cal/temp removed: DS18B20 needs no field calibration.
+export type CommandType = 'threshold' | 'reboot';
 
 export interface CommandRecord {
   type: CommandType;

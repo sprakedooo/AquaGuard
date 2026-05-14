@@ -2,6 +2,7 @@
 #include "config.h"
 #include <WiFi.h>
 #include <WebServer.h>
+#include <Preferences.h>
 
 static WebServer s_server(80);
 static Settings* s_settings = nullptr;
@@ -111,10 +112,17 @@ static void handleSave() {
 }
 
 static void handleWifi() {
-    s_server.send(200, "text/html", "Entering AP setup. Connect to '" AP_SSID_PREFIX "-…'");
+    // Set the "run portal on next boot" flag so the receiver enters forced
+    // portal mode (waits forever for config) instead of just retrying connect.
+    {
+        Preferences p;
+        p.begin("aqgsys", false);
+        p.putBool("portal", true);
+        p.end();
+    }
+    s_server.send(200, "text/html", "Entering AP setup. Connect to '" AP_SSID_PREFIX "-…' in ~10 s.");
     delay(500);
-    // Trigger by clearing WiFi creds and rebooting (WiFiManager picks up at boot).
-    WiFi.disconnect(true, true);
+    WiFi.disconnect(true, true);   // also clear stored WiFi creds
     delay(200);
     ESP.restart();
 }
