@@ -10,23 +10,51 @@ admin.initializeApp({
 export const db = admin.database();
 export const ServerValue = admin.database.ServerValue;
 
-const deviceRef  = (id)       => db.ref(`devices/${id}`);
-const calRef     = (id)       => db.ref(`devices/${id}/calibration`);
-const threshRef  = (id)       => db.ref(`devices/${id}/meta/thresholds`);
+// ──────────────────────────────────────────────────────────────────────────────
+// Device-index cache: deviceId → uid
+// Written by the web app during onboarding; read here to resolve the user path.
+// ──────────────────────────────────────────────────────────────────────────────
+const _uidCache = new Map();
+
+async function uidOf(deviceId) {
+  if (_uidCache.has(deviceId)) return _uidCache.get(deviceId);
+  const snap = await db.ref(`device-index/${deviceId}`).once('value');
+  const uid  = snap.val() ?? null;
+  if (uid) _uidCache.set(deviceId, uid);
+  return uid;
+}
+
+/** Returns the database ref for a device, resolving the per-user path.
+ *  Falls back to the legacy /devices/{id} path if the device has no owner
+ *  in the index (e.g. mock-feed or pre-migration data). */
+async function deviceRef(deviceId) {
+  const uid = await uidOf(deviceId);
+  if (!uid) {
+    logger.warn({ deviceId }, 'device-index miss — falling back to /devices path');
+    return db.ref(`devices/${deviceId}`);
+  }
+  return db.ref(`users/${uid}/devices/${deviceId}`);
+}
+
+const calRef   = async (id) => (await deviceRef(id)).child('calibration');
+const threshRef = async (id) => (await deviceRef(id)).child('meta/thresholds');
 
 // ---------- Calibration (read / write) ----------
 
 export async function saveCalibration(deviceId, type, data) {
-  await calRef(deviceId).child(type).set({ ...data, savedAt: ServerValue.TIMESTAMP });
+  const r = await calRef(deviceId);
+  await r.child(type).set({ ...data, savedAt: ServerValue.TIMESTAMP });
 }
 
 async function readCalibration(deviceId) {
-  const snap = await calRef(deviceId).once('value');
+  const r    = await calRef(deviceId);
+  const snap = await r.once('value');
   return snap.val() ?? {};
 }
 
 async function readThresholds(deviceId) {
-  const snap = await threshRef(deviceId).once('value');
+  const r    = await threshRef(deviceId);
+  const snap = await r.once('value');
   return snap.val() ?? null;
 }
 
@@ -34,19 +62,14 @@ async function readThresholds(deviceId) {
 
 // Two-point linear interpolation between (v7, pH 7) and (v4, pH 4), with
 // Nernst temperature correction applied to the slope.
-//
-//   pH_meas = 7 + (V_meas - V7) / slopeRef
-//
-// slopeRef = (V4 - V7) / (4 - 7) = mV per pH unit (negative for "standard"
-// analog modules where high V = high pH, positive for inverted modules).
 function computePh(pH_mv, tempC, phCal) {
   if (!phCal?.v7_mv || !phCal?.v4_mv) return null;
   const v7 = phCal.v7_mv;
   const v4 = phCal.v4_mv;
-  let slopeRef = (v4 - v7) / (4 - 7); // mV/pH
-  if (Math.abs(slopeRef) < 1) slopeRef = -167;  // sanity fallback if cal is degenerate
+  let slopeRef = (v4 - v7) / (4 - 7);
+  if (Math.abs(slopeRef) < 1) slopeRef = -167;
 
-  const tK    = (typeof tempC === 'number' && tempC > -50) ? tempC + 273.15 : 298.15;
+  const tK   = (typeof tempC === 'number' && tempC > -50) ? tempC + 273.15 : 298.15;
   const slope = slopeRef * (tK / 298.15);
 
   let pH = 7 + (pH_mv - v7) / slope;
@@ -55,12 +78,11 @@ function computePh(pH_mv, tempC, phCal) {
   return Math.round(pH * 100) / 100;
 }
 
-// Linear interpolation between clear-water and dirty-water cal points
 function computeTurbNTU(turb_mv, turbCal) {
   if (!turbCal?.v_clear_mv || !turbCal?.v_dirty_mv) return null;
   const vc = turbCal.v_clear_mv;
   const vd = turbCal.v_dirty_mv;
-  if (Math.abs(vc - vd) < 50) return null; // cal points too close
+  if (Math.abs(vc - vd) < 50) return null;
 
   let ntu = (vc - turb_mv) * (turbCal.ntu_dirty / (vc - vd));
   if (ntu < 0)    ntu = 0;
@@ -68,7 +90,6 @@ function computeTurbNTU(turb_mv, turbCal) {
   return Math.round(ntu * 10) / 10;
 }
 
-// Evaluate alert level (0=normal, 1=warning, 2=critical) for a single variable
 function classifyValue(v, thresh) {
   if (v == null || thresh == null) return 0;
   if (v <= (thresh.critLow ?? -Infinity) || v >= (thresh.critHigh ?? Infinity)) return 2;
@@ -81,40 +102,36 @@ function classifyValue(v, thresh) {
 export async function recordTelemetry(deviceId, data) {
   const { seq, ts, temp, pH, turb, alert, flags, pH_mv, turb_mv, rssi, snr } = data;
 
-  // 1 — Read calibration + thresholds in parallel
   const [cal, thresholds] = await Promise.all([
     readCalibration(deviceId),
     readThresholds(deviceId),
   ]);
 
-  // 2 — Compute pH and turbidity on the server
-  const computedPh   = (pH_mv   != null) ? computePh(pH_mv,   temp, cal.ph)   : null;
+  const computedPh   = (pH_mv   != null) ? computePh(pH_mv, temp, cal.ph)   : null;
   const computedTurb = (turb_mv != null) ? computeTurbNTU(turb_mv, cal.turb) : null;
 
-  // 3 — Evaluate server-side alert level (uses all 3 parameters)
-  const tempAlert = classifyValue(temp, thresholds?.temp);
-  const phAlert   = classifyValue(computedPh,   thresholds?.ph);
-  const turbAlert = classifyValue(computedTurb, thresholds?.turb);
+  const tempAlert  = classifyValue(temp,        thresholds?.temp);
+  const phAlert    = classifyValue(computedPh,  thresholds?.ph);
+  const turbAlert  = classifyValue(computedTurb, thresholds?.turb);
   const serverAlert = Math.max(tempAlert, phAlert, turbAlert);
 
-  // 4 — Build the reading record (server values override device-sent 0s)
   const reading = {
     serverTs:    ServerValue.TIMESTAMP,
     deviceTs:    ts           ?? null,
     seq:         seq          ?? null,
     temp:        temp         ?? null,
-    pH:          computedPh   ?? pH ?? null,   // server-computed, fallback to device
+    pH:          computedPh   ?? pH ?? null,
     turb:        computedTurb ?? turb ?? null,
     pH_mv:       pH_mv        ?? null,
     turb_mv:     turb_mv      ?? null,
-    alert:       serverAlert,                  // server re-evaluates with all 3 params
-    deviceAlert: alert        ?? 0,            // original device alert (temp-only)
+    alert:       serverAlert,
+    deviceAlert: alert        ?? 0,
     flags:       flags        ?? 0,
     rssi:        rssi         ?? null,
     snr:         snr          ?? null,
   };
 
-  const dr = deviceRef(deviceId);
+  const dr = await deviceRef(deviceId);
   await Promise.all([
     dr.child('latest').set(reading),
     dr.child('readings').push(reading),
@@ -122,7 +139,7 @@ export async function recordTelemetry(deviceId, data) {
     dr.child('meta/lastAlert').set(serverAlert),
   ]);
 
-  return serverAlert;  // caller uses this for alert-event deduplication
+  return serverAlert;
 }
 
 // ---------- Status ----------
@@ -139,26 +156,22 @@ export async function recordStatus(deviceId, data) {
     ip:       data.ip       ?? null,
     statusTs: ServerValue.TIMESTAMP,
   };
-  await deviceRef(deviceId).child('meta').update(patch);
+  const dr = await deviceRef(deviceId);
+  await dr.child('meta').update(patch);
 }
 
 // ---------- ACK ----------
 
 export async function recordAck(deviceId, data) {
-  await deviceRef(deviceId).child('acks').push({
-    ...data,
-    serverTs: ServerValue.TIMESTAMP,
-  });
+  const dr = await deviceRef(deviceId);
+  await dr.child('acks').push({ ...data, serverTs: ServerValue.TIMESTAMP });
 }
 
 // ---------- Alert event ----------
 
 export async function recordAlertEvent(deviceId, level, payload) {
-  await deviceRef(deviceId).child('alerts').push({
-    level,
-    serverTs: ServerValue.TIMESTAMP,
-    ...payload,
-  });
+  const dr = await deviceRef(deviceId);
+  await dr.child('alerts').push({ level, serverTs: ServerValue.TIMESTAMP, ...payload });
 }
 
 // ---------- Prune old readings ----------
@@ -166,18 +179,25 @@ export async function recordAlertEvent(deviceId, level, payload) {
 export async function pruneOldReadings(retentionDays) {
   if (!retentionDays || retentionDays <= 0) return 0;
   const cutoff = Date.now() - retentionDays * 86400_000;
-  const snap = await db.ref('devices').once('value');
+
+  // Iterate via the device-index so we know which user each device belongs to.
+  const indexSnap = await db.ref('device-index').once('value');
+  const entries   = indexSnap.val() ?? {};
+
   let removed = 0;
   const ops = [];
-  snap.forEach((deviceSnap) => {
-    deviceSnap.child('readings').forEach((r) => {
+
+  for (const [deviceId, uid] of Object.entries(entries)) {
+    const readSnap = await db.ref(`users/${uid}/devices/${deviceId}/readings`).once('value');
+    readSnap.forEach((r) => {
       const t = r.child('serverTs').val();
       if (typeof t === 'number' && t < cutoff) {
         ops.push(r.ref.remove());
         removed++;
       }
     });
-  });
+  }
+
   await Promise.all(ops);
   if (removed > 0) logger.info({ removed, retentionDays }, 'Pruned old readings');
   return removed;

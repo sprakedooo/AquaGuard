@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { Thresholds, VarThresh } from '../types';
 import { issueCommand } from '../lib/commands';
-import { useAuth } from '../auth/AuthProvider';
 
 interface Props { deviceId: string; current: Thresholds; }
 
@@ -27,7 +26,6 @@ function Field({ label, value, step, onChange }: {
 }
 
 export default function ThresholdEditor({ deviceId, current }: Props) {
-  const { isAdmin } = useAuth();
   const [draft, setDraft] = useState<Thresholds>(current);
   const [busy, setBusy]   = useState(false);
   const [msg, setMsg]     = useState('');
@@ -48,9 +46,8 @@ export default function ThresholdEditor({ deviceId, current }: Props) {
 
   return (
     <div className="bg-surface-container-lowest rounded-xl shadow-sm border border-surface-container-high">
-      <div className="p-6 border-b border-surface-container-high flex items-center justify-between">
+      <div className="p-6 border-b border-surface-container-high">
         <h3 className="text-headline-md text-primary">Thresholds</h3>
-        {!isAdmin && <span className="text-label-sm text-on-surface-variant">Admin required</span>}
       </div>
 
       <div className="divide-y divide-surface-container-high">
@@ -70,7 +67,7 @@ export default function ThresholdEditor({ deviceId, current }: Props) {
                 <Field label="crit high" value={v.critHigh} step={row.step} onChange={(n) => upd({ critHigh: n })} />
               </div>
               <div className="flex justify-end mt-3">
-                <button disabled={!isAdmin || busy} onClick={() => send(row.key)}
+                <button disabled={busy} onClick={() => send(row.key)}
                         className="px-4 py-1.5 rounded-lg bg-primary text-on-primary text-label-sm disabled:opacity-50 hover:opacity-90">
                   Send to device
                 </button>

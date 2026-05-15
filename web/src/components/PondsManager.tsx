@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { useDevices } from '../hooks/useDevices';
-import { useAuth } from '../auth/AuthProvider';
 import { useUI }   from '../ui/UIProvider';
 import { createPond, updatePond, deletePond, validateDeviceId } from '../lib/devices';
 import { relTime, alertLabel } from '../lib/format';
@@ -8,8 +7,7 @@ import type { DeviceSummary } from '../types';
 import Icon from './Icon';
 
 export default function PondsManager() {
-  const devices = useDevices();
-  const { isAdmin } = useAuth();
+  const { devices } = useDevices();
   const { currentDeviceId, setCurrentDeviceId } = useUI();
   const [editing, setEditing] = useState<DeviceSummary | null>(null);
   const [creating, setCreating] = useState(false);
@@ -25,8 +23,8 @@ export default function PondsManager() {
                                     : `${devices.length} pond${devices.length === 1 ? '' : 's'} registered`}
             </p>
           </div>
-          <button onClick={() => setCreating(true)} disabled={!isAdmin}
-                  className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-on-primary text-label-sm disabled:opacity-50 hover:opacity-90">
+          <button onClick={() => setCreating(true)}
+                  className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-on-primary text-label-sm hover:opacity-90">
             <Icon name="add" size={18} />
             Add pond
           </button>
@@ -76,8 +74,8 @@ export default function PondsManager() {
                         Select
                       </button>
                     )}
-                    <button onClick={() => setEditing(d)} disabled={!isAdmin}
-                            className="px-3 py-1.5 rounded-lg border border-outline-variant text-label-sm hover:bg-surface-container-high disabled:opacity-50">
+                    <button onClick={() => setEditing(d)}
+                            className="px-3 py-1.5 rounded-lg border border-outline-variant text-label-sm hover:bg-surface-container-high">
                       Edit
                     </button>
                   </div>
@@ -98,11 +96,11 @@ export default function PondsManager() {
       {editing && <PondFormModal title={`Edit ${editing.profile?.name || editing.id}`} submitLabel="Save"
                                  lockId initial={{ id: editing.id, ...editing.profile }}
                                  onClose={() => setEditing(null)}
-                                 onDelete={isAdmin ? async () => {
+                                 onDelete={async () => {
                                    if (!confirm(`Delete "${editing.profile?.name || editing.id}" and all its readings? This cannot be undone.`)) return;
                                    await deletePond(editing.id);
                                    setEditing(null);
-                                 } : undefined}
+                                 }}
                                  onSubmit={async ({ id: _id, ...profile }) => {
                                    await updatePond(editing.id, profile);
                                    setEditing(null);

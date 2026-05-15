@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import type { Reading } from '../types';
 import { issueCommand } from '../lib/commands';
-import { useAuth } from '../auth/AuthProvider';
 import { fmt } from '../lib/format';
 import Icon from './Icon';
 
@@ -9,7 +8,6 @@ interface Props { deviceId: string; latest: Reading | null; }
 type Tab = 'ph' | 'turb' | 'temp';
 
 export default function CalibrationWizard({ deviceId, latest }: Props) {
-  const { isAdmin } = useAuth();
   const [tab, setTab] = useState<Tab>('ph');
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState('');
@@ -39,9 +37,8 @@ export default function CalibrationWizard({ deviceId, latest }: Props) {
 
   return (
     <div className="bg-surface-container-lowest rounded-xl shadow-sm border border-surface-container-high">
-      <div className="p-6 border-b border-surface-container-high flex items-center justify-between">
+      <div className="p-6 border-b border-surface-container-high">
         <h3 className="text-headline-md text-primary">Calibration</h3>
-        {!isAdmin && <span className="text-label-sm text-on-surface-variant">Admin required</span>}
       </div>
       <div className="p-6 space-y-4">
         <div className="flex gap-2 flex-wrap">
@@ -50,9 +47,9 @@ export default function CalibrationWizard({ deviceId, latest }: Props) {
           <TabBtn id="temp" label="Temperature"   icon="thermostat" />
         </div>
 
-        {tab === 'ph'   && <PhPanel   latest={latest} disabled={!isAdmin || busy} onSend={send} />}
-        {tab === 'turb' && <TurbPanel latest={latest} disabled={!isAdmin || busy} onSend={send} />}
-        {tab === 'temp' && <TempPanel latest={latest} disabled={!isAdmin || busy} onSend={send} />}
+        {tab === 'ph'   && <PhPanel   latest={latest} disabled={busy} onSend={send} />}
+        {tab === 'turb' && <TurbPanel latest={latest} disabled={busy} onSend={send} />}
+        {tab === 'temp' && <TempPanel latest={latest} disabled={busy} onSend={send} />}
 
         {msg && <p className="text-label-sm text-on-surface-variant">{msg}</p>}
       </div>

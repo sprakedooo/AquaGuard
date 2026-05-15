@@ -4,7 +4,7 @@ import { useUI } from '../ui/UIProvider';
 import Icon from './Icon';
 
 export default function DevicePicker({ onAddNew }: { onAddNew?: () => void }) {
-  const devices = useDevices();
+  const { devices } = useDevices();
   const { currentDeviceId, setCurrentDeviceId } = useUI();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -26,15 +26,15 @@ export default function DevicePicker({ onAddNew }: { onAddNew?: () => void }) {
   return (
     <div className="relative" ref={ref}>
       <button onClick={() => setOpen((o) => !o)}
-              className="flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-surface-container-high transition-colors">
-        <span className={`w-2 h-2 rounded-full ${current ? dot : 'bg-outline'}`} />
-        <span className="text-on-surface-variant text-label-sm uppercase tracking-wider">Station</span>
-        <span className="text-data-tabular font-semibold text-on-surface">{label}</span>
-        <Icon name={open ? 'expand_less' : 'expand_more'} size={18} />
+              className="flex items-center gap-1.5 md:gap-2 px-2 md:px-3 py-1.5 rounded-lg hover:bg-surface-container-high transition-colors max-w-[200px] md:max-w-none">
+        <span className={`w-2 h-2 rounded-full shrink-0 ${current ? dot : 'bg-outline'}`} />
+        <span className="hidden sm:inline text-on-surface-variant text-label-sm uppercase tracking-wider shrink-0">Station</span>
+        <span className="text-data-tabular font-semibold text-on-surface truncate">{label}</span>
+        <Icon name={open ? 'expand_less' : 'expand_more'} size={18} className="shrink-0" />
       </button>
 
       {open && (
-        <div className="absolute left-0 top-full mt-2 w-80 max-h-96 overflow-y-auto bg-surface-container-lowest border border-outline-variant rounded-xl shadow-lg z-50 p-1">
+        <div className="absolute left-0 top-full mt-2 w-[min(320px,calc(100vw-2rem))] max-h-96 overflow-y-auto bg-surface-container-lowest border border-outline-variant rounded-xl shadow-lg z-50 p-1">
           {devices.length === 0 ? (
             <p className="px-3 py-4 text-body-md text-on-surface-variant text-center">
               No ponds yet.

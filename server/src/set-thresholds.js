@@ -1,5 +1,5 @@
 // One-off: write default aquaculture thresholds for a device.
-// Values picked for tilapia / general freshwater fish ponds — adjust to taste.
+// Usage:  node src/set-thresholds.js <deviceId>
 import { db } from './firebase.js';
 
 const deviceId = process.argv[2] ?? 'pond-01';
@@ -25,7 +25,16 @@ const thresholds = {
   },
 };
 
-await db.ref(`devices/${deviceId}/meta/thresholds`).set(thresholds);
-console.log(`✓ Thresholds written for "${deviceId}":`);
+// Look up the device owner from the index.
+const uidSnap = await db.ref(`device-index/${deviceId}`).once('value');
+const uid     = uidSnap.val();
+
+if (!uid) {
+  console.error(`No owner found in device-index for "${deviceId}". Has the device been set up via the web app?`);
+  process.exit(1);
+}
+
+await db.ref(`users/${uid}/devices/${deviceId}/meta/thresholds`).set(thresholds);
+console.log(`✓ Thresholds written for "${deviceId}" (uid=${uid}):`);
 console.log(JSON.stringify(thresholds, null, 2));
 process.exit(0);

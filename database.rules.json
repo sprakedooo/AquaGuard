@@ -1,36 +1,33 @@
 {
   "rules": {
-    "devices": {
-      "$deviceId": {
-        // Anyone authenticated can read live data (gauges, chart, status)
-        "latest":   { ".read": "auth != null", ".write": false },
-        "meta":     { ".read": "auth != null", ".write": false },
-        "alerts":   { ".read": "auth != null", ".write": false },
-        "acks":     { ".read": "auth != null", ".write": false },
 
-        // Only admin can read the full readings history
-        "readings": { ".read": "auth != null && auth.token.admin === true", ".write": false },
-
-        // Admin can write calibration and thresholds
-        "calibration": {
-          ".read":  "auth != null",
-          ".write": "auth != null && auth.token.admin === true"
-        },
-
-        // Server (service account) writes everything; admin can read
-        ".write": "auth != null && auth.token.admin === true"
+    // Each user owns their entire subtree — simple and airtight.
+    "users": {
+      "$uid": {
+        ".read":  "$uid === auth.uid",
+        ".write": "$uid === auth.uid"
       }
     },
 
-    // Command queue — admin writes, server processes
+    // Global deviceId → uid index.
+    // Any authenticated user can READ a single entry to check if an ID is taken.
+    // Only the owning user may CREATE or DELETE their own entry.
+    "device-index": {
+      "$deviceId": {
+        ".read":  "auth != null",
+        ".write": "auth != null && (!data.exists() || data.val() === auth.uid)"
+      }
+    },
+
+    // Command queue: owner can enqueue & read; server (Admin SDK) processes.
     "commands": {
       "$deviceId": {
-        ".read":  "auth != null && auth.token.admin === true",
-        ".write": "auth != null && auth.token.admin === true"
+        ".read":  "auth != null && root.child('device-index').child($deviceId).val() === auth.uid",
+        ".write": "auth != null && root.child('device-index').child($deviceId).val() === auth.uid"
       }
     },
 
-    // Deny everything else by default
+    // Deny everything else by default.
     "$other": { ".read": false, ".write": false }
   }
 }

@@ -3,7 +3,7 @@ import {
   query, ref, orderByChild, limitToLast,
   onChildAdded, onChildChanged, onChildRemoved,
 } from 'firebase/database';
-import { db } from '../firebase';
+import { db, auth } from '../firebase';
 import type { Reading } from '../types';
 
 export interface Point extends Reading { key: string; }
@@ -22,8 +22,11 @@ export function useReadings(deviceId: string, rangeMs: number) {
     bufferRef.current = [];
     setPoints([]);
 
+    const uid = auth.currentUser?.uid;
+    if (!uid) return;
+
     const q = query(
-      ref(db, `devices/${deviceId}/readings`),
+      ref(db, `users/${uid}/devices/${deviceId}/readings`),
       orderByChild('serverTs'),
       limitToLast(MAX_POINTS),
     );

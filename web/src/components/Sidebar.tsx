@@ -1,6 +1,5 @@
-import { signOut } from 'firebase/auth';
-import { auth } from '../firebase';
 import { useUI } from '../ui/UIProvider';
+import SignOutButton from './SignOutButton';
 import Icon from './Icon';
 
 export type Section = 'dashboard' | 'ponds' | 'calibration' | 'thresholds' | 'alerts';
@@ -25,7 +24,7 @@ export default function Sidebar({ active, onChange }: Props) {
   const width = collapsed ? 'w-sidebar-collapsed' : 'w-sidebar-width';
 
   return (
-    <aside className={`fixed left-0 top-0 h-full ${width} flex flex-col p-unit border-r border-white/5 z-50 transition-all duration-200 text-white`}
+    <aside className={`hidden md:flex fixed left-0 top-0 h-full ${width} flex-col p-unit border-r border-white/5 z-50 transition-all duration-200 text-white`}
            style={{
              backgroundImage: 'linear-gradient(180deg, #001428 0%, #001e40 35%, #003366 100%)',
            }}>
@@ -62,14 +61,10 @@ export default function Sidebar({ active, onChange }: Props) {
       </nav>
 
       <div className="space-y-1 pt-4 border-t border-white/10">
-        <button onClick={() => signOut(auth)}
-                title={collapsed ? 'Sign out' : undefined}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-white/70 hover:bg-white/5 hover:text-white transition-all ${
-                  collapsed ? 'justify-center' : ''
-                }`}>
-          <Icon name="logout" />
-          {!collapsed && <span className="text-label-sm whitespace-nowrap">Sign out</span>}
-        </button>
+        <SignOutButton iconOnly={collapsed}
+                       className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-white/70 hover:bg-white/5 hover:text-white transition-all ${
+                         collapsed ? 'justify-center' : ''
+                       }`} />
       </div>
     </aside>
   );

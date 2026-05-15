@@ -10,6 +10,7 @@
 //   SCENARIO=spike node scripts/mock-feed.js   # injects an alert burst
 //
 // Requires the same .env / service-account.json as the bridge.
+// The device must have been set up via the web app first (so device-index exists).
 
 import 'dotenv/config';
 import admin from 'firebase-admin';
@@ -29,6 +30,17 @@ admin.initializeApp({
 });
 const db = admin.database();
 const { ServerValue } = admin.database;
+
+// Resolve device owner from the index.
+const uidSnap = await db.ref(`device-index/${DEVICE_ID}`).once('value');
+const OWNER_UID = uidSnap.val();
+if (!OWNER_UID) {
+  console.error(`No owner found in device-index for "${DEVICE_ID}".`);
+  console.error('Set the device up via the web app first, then run mock-feed.');
+  process.exit(1);
+}
+const DEV_PATH = `users/${OWNER_UID}/devices/${DEVICE_ID}`;
+console.log(`Mock feed → ${DEV_PATH} every ${TICK_MS}ms (scenario=${SCENARIO}). Ctrl+C to stop.`);
 
 // ---------- Default thresholds (match firmware/web defaults) ----------
 const THRESH = {
@@ -63,10 +75,8 @@ const phW   = makeWalker({ mean: 7.4, std: 0.04 });
 const turbW = makeWalker({ mean: 25,  std: 2.5  });
 
 // ---------- Scenario hooks ----------
-let scenarioState = { spikeUntil: 0 };
 function applyScenario(reading, now) {
   if (SCENARIO === 'spike') {
-    // 20 s every 2 min: push turbidity high to trigger alerts
     const phase = (now / 1000) % 120;
     if (phase < 20) reading.turb = 180 + Math.random() * 30;
   }
@@ -77,13 +87,9 @@ function applyScenario(reading, now) {
   return reading;
 }
 
-// ---------- Probe voltage simulation (so calibration wizard has data) ----------
-function phToMv(pH) {
-  // Inverse of firmware: V = V7 + (7 - pH) * slope  (slope ~ -167 mV/pH)
-  return Math.round(2500 + (7 - pH) * -167);
-}
+// ---------- Probe voltage simulation ----------
+function phToMv(pH)   { return Math.round(2500 + (7 - pH) * -167); }
 function ntuToMv(ntu) {
-  // Inverse linear: V = V_clear - (ntu / NTU_dirty) * (V_clear - V_dirty)
   const Vc = 3000, Vd = 1500, NTUd = 1000;
   return Math.round(Math.max(0, Math.min(3300, Vc - (ntu / NTUd) * (Vc - Vd))));
 }
@@ -91,14 +97,11 @@ function ntuToMv(ntu) {
 // ---------- Emit one reading ----------
 let seq = 0;
 let lastAlert = -1;
+const startedAt = Date.now();
 
 async function tick() {
   const now = Date.now();
-  let r = {
-    temp: tempW(),
-    pH:   phW(),
-    turb: Math.max(0, turbW()),
-  };
+  let r = { temp: tempW(), pH: phW(), turb: Math.max(0, turbW()) };
   r = applyScenario(r, now);
 
   const alertTemp = classify(r.temp, THRESH.temp);
@@ -122,7 +125,7 @@ async function tick() {
     snr:  Number((6 + Math.random() * 4).toFixed(1)),
   };
 
-  const dev = db.ref(`devices/${DEVICE_ID}`);
+  const dev = db.ref(DEV_PATH);
   await Promise.all([
     dev.child('latest').set(reading),
     dev.child('readings').push(reading),
@@ -157,12 +160,9 @@ async function tick() {
   console.log(
     `[${new Date().toLocaleTimeString()}] ${DEVICE_ID}  ` +
     `T=${reading.temp}°C  pH=${reading.pH}  Turb=${reading.turb}NTU  ` +
-    `alert=${alert}  seq=${reading.seq}`
+    `alert=${alert}  seq=${reading.seq}`,
   );
 }
-
-const startedAt = Date.now();
-console.log(`Mock feed → ${DEVICE_ID} every ${TICK_MS}ms (scenario=${SCENARIO}). Ctrl+C to stop.`);
 
 tick().catch(console.error);
 const timer = setInterval(() => tick().catch(console.error), TICK_MS);
@@ -170,7 +170,7 @@ const timer = setInterval(() => tick().catch(console.error), TICK_MS);
 async function shutdown() {
   clearInterval(timer);
   try {
-    await db.ref(`devices/${DEVICE_ID}/meta`).update({ online: false, statusTs: ServerValue.TIMESTAMP });
+    await db.ref(`${DEV_PATH}/meta`).update({ online: false, statusTs: ServerValue.TIMESTAMP });
   } catch {}
   process.exit(0);
 }

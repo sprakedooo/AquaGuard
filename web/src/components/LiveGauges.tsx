@@ -13,14 +13,14 @@ export default function LiveGauges({ latest, th, history }: Props) {
     <div className="grid gap-gutter grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
       <MetricCard icon="thermostat" label="Temperature"
                   value={latest?.temp} unit="°C" digits={2}
-                  thresh={th.temp} history={history} field="temp" />
+                  thresh={th.temp} history={history} field="temp" kind="temp" />
       <MetricCard icon="science" label="pH Level"
                   value={latest?.pH} digits={2}
-                  thresh={th.ph} history={history} field="pH" />
+                  thresh={th.ph} history={history} field="pH" kind="ph" />
       <MetricCard icon="water_drop" label="Turbidity"
                   value={latest?.turb} unit="NTU" digits={1}
                   thresh={th.turb} upperOnly
-                  history={history} field="turb" />
+                  history={history} field="turb" kind="turb" />
     </div>
   );
 }

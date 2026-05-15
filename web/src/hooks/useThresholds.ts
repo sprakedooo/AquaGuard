@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { ref, onValue } from 'firebase/database';
-import { db } from '../firebase';
+import { db, auth } from '../firebase';
 import type { Thresholds } from '../types';
 
 const DEFAULT_THRESHOLDS: Thresholds = {
@@ -12,7 +12,9 @@ const DEFAULT_THRESHOLDS: Thresholds = {
 export function useThresholds(deviceId: string) {
   const [th, setTh] = useState<Thresholds>(DEFAULT_THRESHOLDS);
   useEffect(() => {
-    const r = ref(db, `devices/${deviceId}/meta/thresholds`);
+    const uid = auth.currentUser?.uid;
+    if (!uid) return;
+    const r = ref(db, `users/${uid}/devices/${deviceId}/meta/thresholds`);
     return onValue(r, (snap) => {
       const v = snap.val();
       if (v) setTh(v);
