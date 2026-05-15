@@ -13,32 +13,24 @@ const ROWS: Array<{ key: Var; label: string; step: number; upperOnly?: boolean }
   { key: 'turb', label: 'Turbidity (NTU)',   step: 1, upperOnly: true },
 ];
 
-function Row({ row, val, onChange }: {
-  row: typeof ROWS[number]; val: VarThresh; onChange: (v: VarThresh) => void;
+function Field({ label, value, step, onChange }: {
+  label: string; value: number; step: number; onChange: (n: number) => void;
 }) {
-  const f = (k: keyof VarThresh) => (
-    <input type="number" step={row.step} value={val[k]}
-           onChange={(e) => onChange({ ...val, [k]: Number(e.target.value) })}
-           className="w-full rounded border border-slate-300 px-2 py-1 text-sm tabular-nums" />
-  );
   return (
-    <div className="grid grid-cols-5 gap-2 items-center py-2">
-      <div className="text-sm font-medium">{row.label}</div>
-      {row.upperOnly
-        ? <><div /><div /></>
-        : <><label className="text-xs text-slate-500">crit low{f('critLow')}</label>
-            <label className="text-xs text-slate-500">warn low{f('warnLow')}</label></>}
-      <label className="text-xs text-slate-500">warn high{f('warnHigh')}</label>
-      <label className="text-xs text-slate-500">crit high{f('critHigh')}</label>
-    </div>
+    <label className="block">
+      <span className="block text-[10px] uppercase tracking-wider text-on-surface-variant font-bold">{label}</span>
+      <input type="number" step={step} value={value}
+             onChange={(e) => onChange(Number(e.target.value))}
+             className="mt-1 w-full rounded-lg border border-outline-variant bg-surface-container-low px-2 py-1.5 text-data-tabular tabular-nums focus:outline-none focus:border-secondary" />
+    </label>
   );
 }
 
 export default function ThresholdEditor({ deviceId, current }: Props) {
   const { isAdmin } = useAuth();
   const [draft, setDraft] = useState<Thresholds>(current);
-  const [busy, setBusy] = useState(false);
-  const [msg, setMsg]   = useState('');
+  const [busy, setBusy]   = useState(false);
+  const [msg, setMsg]     = useState('');
 
   useEffect(() => setDraft(current), [current]);
 
@@ -55,24 +47,39 @@ export default function ThresholdEditor({ deviceId, current }: Props) {
   }
 
   return (
-    <div className="rounded-xl bg-white p-5 shadow-sm border border-slate-200">
-      <div className="flex items-center justify-between mb-2">
-        <h3 className="font-medium">Thresholds</h3>
-        {!isAdmin && <span className="text-xs text-slate-500">Read-only (admin required)</span>}
+    <div className="bg-surface-container-lowest rounded-xl shadow-sm border border-surface-container-high">
+      <div className="p-6 border-b border-surface-container-high flex items-center justify-between">
+        <h3 className="text-headline-md text-primary">Thresholds</h3>
+        {!isAdmin && <span className="text-label-sm text-on-surface-variant">Admin required</span>}
       </div>
-      {ROWS.map((row) => (
-        <div key={row.key} className="border-t border-slate-100 first:border-t-0">
-          <Row row={row} val={draft[row.key]}
-               onChange={(v) => setDraft({ ...draft, [row.key]: v })} />
-          <div className="flex justify-end pb-2">
-            <button disabled={!isAdmin || busy} onClick={() => send(row.key)}
-                    className="text-xs px-3 py-1 rounded bg-slate-900 text-white disabled:opacity-50 hover:bg-slate-800">
-              Send to device
-            </button>
-          </div>
-        </div>
-      ))}
-      {msg && <p className="mt-2 text-xs text-slate-600">{msg}</p>}
+
+      <div className="divide-y divide-surface-container-high">
+        {ROWS.map((row) => {
+          const v: VarThresh = draft[row.key];
+          const upd = (patch: Partial<VarThresh>) =>
+            setDraft({ ...draft, [row.key]: { ...v, ...patch } });
+          return (
+            <div key={row.key} className="p-6">
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-data-tabular font-semibold text-on-surface">{row.label}</span>
+              </div>
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                {!row.upperOnly && <Field label="crit low"  value={v.critLow}  step={row.step} onChange={(n) => upd({ critLow: n })} />}
+                {!row.upperOnly && <Field label="warn low"  value={v.warnLow}  step={row.step} onChange={(n) => upd({ warnLow: n })} />}
+                <Field label="warn high" value={v.warnHigh} step={row.step} onChange={(n) => upd({ warnHigh: n })} />
+                <Field label="crit high" value={v.critHigh} step={row.step} onChange={(n) => upd({ critHigh: n })} />
+              </div>
+              <div className="flex justify-end mt-3">
+                <button disabled={!isAdmin || busy} onClick={() => send(row.key)}
+                        className="px-4 py-1.5 rounded-lg bg-primary text-on-primary text-label-sm disabled:opacity-50 hover:opacity-90">
+                  Send to device
+                </button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      {msg && <div className="px-6 pb-4 text-label-sm text-on-surface-variant">{msg}</div>}
     </div>
   );
 }

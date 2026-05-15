@@ -6,7 +6,8 @@
       "Bash(npm run *)",
       "PowerShell($proc = Get-NetTCPConnection -LocalPort 8080 -ErrorAction SilentlyContinue | Select-Object -First 1; if \\($proc\\) { Stop-Process -Id $proc.OwningProcess -Force; \"Killed PID $\\($proc.OwningProcess\\)\" } else { \"Port 8080 is free\" })",
       "PowerShell(Start-Sleep -Seconds 10; Get-Content \"C:\\\\Users\\\\ELVIN ARCILLA\\\\AquaGuard\\\\server\\\\bridge.log\" -Tail 6 | ForEach-Object { $j = $_ | ConvertFrom-Json; \"$\\(\\([System.DateTimeOffset]::FromUnixTimeMilliseconds\\($j.time\\)\\).LocalDateTime.ToString\\('HH:mm:ss'\\)\\) [$\\($j.level\\)] $\\($j.msg\\) $\\($j.err.message\\)\" })",
-      "Bash(\"/c/Users/ELVIN ARCILLA/.platformio/penv/Scripts/pio.exe\" run --target upload)"
+      "Bash(\"/c/Users/ELVIN ARCILLA/.platformio/penv/Scripts/pio.exe\" run --target upload)",
+      "mcp__Claude_Preview__preview_start"
     ]
   }
 }

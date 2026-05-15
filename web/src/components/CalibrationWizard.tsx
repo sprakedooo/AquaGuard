@@ -1,157 +1,176 @@
 import { useState } from 'react';
-import { ref, set } from 'firebase/database';
 import type { Reading } from '../types';
-import { db } from '../firebase';
+import { issueCommand } from '../lib/commands';
 import { useAuth } from '../auth/AuthProvider';
+import { fmt } from '../lib/format';
+import Icon from './Icon';
 
 interface Props { deviceId: string; latest: Reading | null; }
-
-type Tab = 'ph' | 'turb';
+type Tab = 'ph' | 'turb' | 'temp';
 
 export default function CalibrationWizard({ deviceId, latest }: Props) {
   const { isAdmin } = useAuth();
-  const [tab, setTab]   = useState<Tab>('ph');
+  const [tab, setTab] = useState<Tab>('ph');
   const [busy, setBusy] = useState(false);
-  const [msg, setMsg]   = useState('');
+  const [msg, setMsg] = useState('');
 
-  // pH and turbidity calibration is saved directly to Firebase — the server
-  // reads it on every telemetry packet and applies the formula there.
-  async function saveCalToFirebase(type: 'ph' | 'turb', data: Record<string, unknown>, label: string) {
+  async function send(type: 'cal/ph' | 'cal/turb' | 'cal/temp', payload: Record<string, unknown>, label: string) {
     setBusy(true); setMsg('');
     try {
-      await set(ref(db, `devices/${deviceId}/calibration/${type}`), {
-        ...data,
-        savedAt: Date.now(),
-      });
-      setMsg(`✓ ${label} saved — server will apply on next reading.`);
+      await issueCommand(deviceId, type, payload);
+      setMsg(`Sent ${label} — applying…`);
     } catch (e) {
-      setMsg(e instanceof Error ? e.message : 'Save failed');
+      setMsg(e instanceof Error ? e.message : 'Send failed');
     } finally {
       setBusy(false);
     }
   }
 
-  const TabBtn = ({ id, label }: { id: Tab; label: string }) => (
+  const TabBtn = ({ id, label, icon }: { id: Tab; label: string; icon: string }) => (
     <button onClick={() => setTab(id)}
-            className={`px-3 py-1.5 text-sm rounded ${tab === id
-              ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}>
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-label-sm transition-colors ${
+              tab === id
+                ? 'bg-primary text-on-primary'
+                : 'border border-outline-variant text-on-surface-variant hover:bg-surface-container-high'}`}>
+      <Icon name={icon} size={16} />
       {label}
     </button>
   );
 
   return (
-    <div className="rounded-xl bg-white p-5 shadow-sm border border-slate-200">
-      <div className="flex items-center justify-between mb-3">
-        <h3 className="font-medium">Calibration</h3>
-        {!isAdmin && <span className="text-xs text-slate-500">Read-only (admin required)</span>}
+    <div className="bg-surface-container-lowest rounded-xl shadow-sm border border-surface-container-high">
+      <div className="p-6 border-b border-surface-container-high flex items-center justify-between">
+        <h3 className="text-headline-md text-primary">Calibration</h3>
+        {!isAdmin && <span className="text-label-sm text-on-surface-variant">Admin required</span>}
       </div>
-      <div className="flex gap-2 mb-4">
-        <TabBtn id="ph"   label="pH (2-point)" />
-        <TabBtn id="turb" label="Turbidity"    />
-      </div>
-
-      {tab === 'ph'   && <PhPanel   latest={latest} disabled={!isAdmin || busy} onSave={saveCalToFirebase} />}
-      {tab === 'turb' && <TurbPanel latest={latest} disabled={!isAdmin || busy} onSave={saveCalToFirebase} />}
-
-      {msg && <p className="mt-3 text-xs text-slate-600">{msg}</p>}
-    </div>
-  );
-}
-
-// ---------- pH ----------
-function PhPanel({ latest, disabled, onSave }: {
-  latest: Reading | null; disabled: boolean;
-  onSave: (type: 'ph', data: Record<string, unknown>, label: string) => Promise<void>;
-}) {
-  const mv = latest?.pH_mv ?? null;
-  const [v7, setV7] = useState<number | null>(null);
-  const [v4, setV4] = useState<number | null>(null);
-
-  return (
-    <div className="space-y-3 text-sm">
-      <p className="text-slate-600">
-        Rinse the probe with distilled water, dip into a buffer, wait until the live
-        voltage stabilises (~30 s), then capture. Calibration is saved to the cloud —
-        no LoRa downlink required.
-      </p>
-      <LiveVoltage label="probe" mv={mv} />
-      <div className="grid grid-cols-2 gap-3">
-        <button disabled={disabled || mv == null}
-                onClick={() => { setV7(mv!); onSave('ph', { v7_mv: mv, v4_mv: v4 ?? undefined }, 'pH 7 point'); }}
-                className={`px-3 py-2 rounded text-white disabled:opacity-50 hover:opacity-90 ${v7 ? 'bg-ok' : 'bg-slate-900'}`}>
-          {v7 ? `✓ pH 7 = ${v7} mV` : 'Capture as pH 7'}
-        </button>
-        <button disabled={disabled || mv == null}
-                onClick={() => { setV4(mv!); onSave('ph', { v7_mv: v7 ?? undefined, v4_mv: mv }, 'pH 4 point'); }}
-                className={`px-3 py-2 rounded text-white disabled:opacity-50 hover:opacity-90 ${v4 ? 'bg-ok' : 'bg-slate-900'}`}>
-          {v4 ? `✓ pH 4 = ${v4} mV` : 'Capture as pH 4'}
-        </button>
-      </div>
-      {v7 && v4 && (
-        <button disabled={disabled}
-                onClick={() => onSave('ph', { v7_mv: v7, v4_mv: v4 }, 'pH calibration')}
-                className="w-full px-3 py-2 rounded bg-ok text-white disabled:opacity-50 hover:opacity-90">
-          Save both points to cloud
-        </button>
-      )}
-      <p className="text-xs text-slate-500">
-        Both points needed for accuracy. Future pH readings are temperature-compensated automatically.
-      </p>
-    </div>
-  );
-}
-
-// ---------- Turbidity ----------
-function TurbPanel({ latest, disabled, onSave }: {
-  latest: Reading | null; disabled: boolean;
-  onSave: (type: 'turb', data: Record<string, unknown>, label: string) => Promise<void>;
-}) {
-  const mv = latest?.turb_mv ?? null;
-  const [vClear, setVClear] = useState<number | null>(null);
-  const [ntu, setNtu]       = useState<number>(100);
-  const [vDirty, setVDirty] = useState<number | null>(null);
-
-  return (
-    <div className="space-y-3 text-sm">
-      <p className="text-slate-600">
-        Place the probe in clear water for the zero point, then in a known-NTU sample.
-        Calibration is saved to the cloud.
-      </p>
-      <LiveVoltage label="probe" mv={mv} />
-      <div className="grid grid-cols-2 gap-3 items-end">
-        <button disabled={disabled || mv == null}
-                onClick={() => { setVClear(mv!); onSave('turb', { v_clear_mv: mv, v_dirty_mv: vDirty ?? undefined, ntu_dirty: ntu }, 'clear point'); }}
-                className={`px-3 py-2 rounded text-white disabled:opacity-50 hover:opacity-90 ${vClear ? 'bg-ok' : 'bg-slate-900'}`}>
-          {vClear ? `✓ Clear = ${vClear} mV` : 'Capture clear (0 NTU)'}
-        </button>
-        <div>
-          <label className="block text-xs text-slate-500 mb-1">Dirty reference NTU</label>
-          <input type="number" value={ntu} step={1} min={1}
-                 onChange={(e) => setNtu(Number(e.target.value))}
-                 className="w-full rounded border border-slate-300 px-2 py-1 text-sm tabular-nums" />
+      <div className="p-6 space-y-4">
+        <div className="flex gap-2 flex-wrap">
+          <TabBtn id="ph"   label="pH (2-point)" icon="science" />
+          <TabBtn id="turb" label="Turbidity"     icon="water_drop" />
+          <TabBtn id="temp" label="Temperature"   icon="thermostat" />
         </div>
-        <button disabled={disabled || mv == null}
-                onClick={() => { setVDirty(mv!); onSave('turb', { v_clear_mv: vClear ?? undefined, v_dirty_mv: mv, ntu_dirty: ntu }, `dirty ${ntu} NTU point`); }}
-                className={`col-span-2 px-3 py-2 rounded text-white disabled:opacity-50 hover:opacity-90 ${vDirty ? 'bg-ok' : 'bg-slate-900'}`}>
-          {vDirty ? `✓ Dirty = ${vDirty} mV @ ${ntu} NTU` : `Capture as ${ntu} NTU`}
-        </button>
+
+        {tab === 'ph'   && <PhPanel   latest={latest} disabled={!isAdmin || busy} onSend={send} />}
+        {tab === 'turb' && <TurbPanel latest={latest} disabled={!isAdmin || busy} onSend={send} />}
+        {tab === 'temp' && <TempPanel latest={latest} disabled={!isAdmin || busy} onSend={send} />}
+
+        {msg && <p className="text-label-sm text-on-surface-variant">{msg}</p>}
       </div>
-      {vClear && vDirty && (
-        <button disabled={disabled}
-                onClick={() => onSave('turb', { v_clear_mv: vClear, v_dirty_mv: vDirty, ntu_dirty: ntu }, 'turbidity calibration')}
-                className="w-full px-3 py-2 rounded bg-ok text-white disabled:opacity-50 hover:opacity-90">
-          Save both points to cloud
-        </button>
-      )}
     </div>
   );
 }
 
 function LiveVoltage({ label, mv }: { label: string; mv: number | null }) {
   return (
-    <div className="rounded bg-slate-50 border border-slate-200 px-3 py-2 flex items-center justify-between">
-      <span className="text-slate-600">Live {label} voltage</span>
-      <span className="font-semibold tabular-nums">{mv == null ? '—' : `${mv} mV`}</span>
+    <div className="rounded-lg bg-surface-container-low border border-outline-variant px-3 py-2 flex items-center justify-between">
+      <span className="text-label-sm text-on-surface-variant uppercase tracking-wider">Live {label} voltage</span>
+      <span className="text-data-tabular font-bold tabular-nums text-primary">{mv == null ? '—' : `${mv} mV`}</span>
+    </div>
+  );
+}
+
+function PrimaryBtn({ disabled, onClick, children }: { disabled?: boolean; onClick?: () => void; children: React.ReactNode }) {
+  return (
+    <button disabled={disabled} onClick={onClick}
+            className="px-3 py-2 rounded-lg bg-primary text-on-primary text-label-sm disabled:opacity-50 hover:opacity-90">
+      {children}
+    </button>
+  );
+}
+
+function PhPanel({ latest, disabled, onSend }: {
+  latest: Reading | null; disabled: boolean;
+  onSend: (t: 'cal/ph', p: Record<string, unknown>, label: string) => Promise<void>;
+}) {
+  const mv = latest?.pH_mv ?? null;
+  return (
+    <div className="space-y-3 text-body-md">
+      <p className="text-on-surface-variant">
+        Rinse the probe with distilled water, dip into a buffer, wait ~30 s for the live voltage to stabilise, then capture.
+      </p>
+      <LiveVoltage label="probe" mv={mv} />
+      <div className="grid grid-cols-2 gap-3">
+        <PrimaryBtn disabled={disabled || mv == null}
+                    onClick={() => onSend('cal/ph', { point: 7, voltage_mv: mv }, 'pH 7 calibration')}>
+          Capture as pH 7
+        </PrimaryBtn>
+        <PrimaryBtn disabled={disabled || mv == null}
+                    onClick={() => onSend('cal/ph', { point: 4, voltage_mv: mv }, 'pH 4 calibration')}>
+          Capture as pH 4
+        </PrimaryBtn>
+      </div>
+      <p className="text-label-sm text-on-surface-variant">
+        Both points needed for accuracy. Future readings are temperature-compensated automatically (Nernst).
+      </p>
+    </div>
+  );
+}
+
+function TurbPanel({ latest, disabled, onSend }: {
+  latest: Reading | null; disabled: boolean;
+  onSend: (t: 'cal/turb', p: Record<string, unknown>, label: string) => Promise<void>;
+}) {
+  const mv = latest?.turb_mv ?? null;
+  const [ntu, setNtu] = useState(1000);
+  return (
+    <div className="space-y-3 text-body-md">
+      <p className="text-on-surface-variant">
+        Place the probe in clear water for the zero point, then in a known-NTU sample for the dirty point.
+      </p>
+      <LiveVoltage label="probe" mv={mv} />
+      <div className="grid grid-cols-2 gap-3 items-end">
+        <PrimaryBtn disabled={disabled || mv == null}
+                    onClick={() => onSend('cal/turb', { point: 0, voltage_mv: mv, ntu: 0 }, 'turbidity zero')}>
+          Capture clear (0 NTU)
+        </PrimaryBtn>
+        <label className="block">
+          <span className="block text-[10px] uppercase tracking-wider text-on-surface-variant font-bold">Dirty NTU</span>
+          <input type="number" value={ntu} step={1} min={1}
+                 onChange={(e) => setNtu(Number(e.target.value))}
+                 className="mt-1 w-full rounded-lg border border-outline-variant bg-surface-container-low px-2 py-1.5 text-data-tabular tabular-nums" />
+        </label>
+        <div className="col-span-2">
+          <PrimaryBtn disabled={disabled || mv == null}
+                      onClick={() => onSend('cal/turb', { point: 1, voltage_mv: mv, ntu }, `turbidity ${ntu} NTU`)}>
+            Capture as {ntu} NTU
+          </PrimaryBtn>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TempPanel({ latest, disabled, onSend }: {
+  latest: Reading | null; disabled: boolean;
+  onSend: (t: 'cal/temp', p: Record<string, unknown>, label: string) => Promise<void>;
+}) {
+  const [reference, setReference] = useState(25);
+  const measured = latest?.temp ?? null;
+  const offset = measured == null ? null : Number((reference - measured).toFixed(2));
+  return (
+    <div className="space-y-3 text-body-md">
+      <p className="text-on-surface-variant">
+        Compare against a trusted thermometer in the same water. Offset (reference − measured) is added to all future readings.
+      </p>
+      <div className="grid grid-cols-2 gap-3">
+        <label className="block">
+          <span className="block text-[10px] uppercase tracking-wider text-on-surface-variant font-bold">Reference (°C)</span>
+          <input type="number" value={reference} step={0.1}
+                 onChange={(e) => setReference(Number(e.target.value))}
+                 className="mt-1 w-full rounded-lg border border-outline-variant bg-surface-container-low px-2 py-1.5 text-data-tabular tabular-nums" />
+        </label>
+        <div>
+          <span className="block text-[10px] uppercase tracking-wider text-on-surface-variant font-bold">Measured</span>
+          <div className="mt-1 px-2 py-1.5 text-data-tabular tabular-nums text-primary font-semibold">{fmt(measured, 2, ' °C')}</div>
+        </div>
+      </div>
+      <div className="text-data-tabular">
+        Offset: <b className="tabular-nums text-primary">{offset == null ? '—' : `${offset > 0 ? '+' : ''}${offset} °C`}</b>
+      </div>
+      <PrimaryBtn disabled={disabled || offset == null}
+                  onClick={() => onSend('cal/temp', { offset_c: offset }, `temperature offset ${offset}°C`)}>
+        Send offset to device
+      </PrimaryBtn>
     </div>
   );
 }

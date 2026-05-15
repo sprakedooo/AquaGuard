@@ -1,21 +1,43 @@
-import { signOut } from 'firebase/auth';
-import { auth } from '../firebase';
 import { useAuth } from '../auth/AuthProvider';
+import { useUI }   from '../ui/UIProvider';
+import Icon from './Icon';
+import DevicePicker from './DevicePicker';
 
-export default function Header({ deviceId }: { deviceId: string }) {
+export default function Header({ onGotoPonds }: { onGotoPonds?: () => void }) {
   const { user, isAdmin } = useAuth();
+  const { theme, toggleTheme, sidebarCollapsed, toggleSidebar } = useUI();
+
   return (
-    <header className="bg-white border-b border-slate-200">
-      <div className="max-w-6xl mx-auto px-6 py-3 flex items-center justify-between">
-        <div className="flex items-baseline gap-3">
-          <h1 className="text-xl font-semibold">AquaGuard</h1>
-          <span className="text-sm text-slate-500">/ {deviceId}</span>
-        </div>
-        <div className="flex items-center gap-3 text-sm">
-          <span className="text-slate-600">{user?.email}</span>
-          {isAdmin && <span className="text-xs px-2 py-0.5 rounded bg-emerald-100 text-emerald-800">admin</span>}
-          <button onClick={() => signOut(auth)}
-                  className="text-slate-500 hover:text-slate-900">Sign out</button>
+    <header className="flex justify-between items-center w-full px-margin-page h-16 sticky top-0 z-40 bg-surface-bright shadow-sm border-b border-outline-variant/40">
+      <div className="flex items-center gap-2">
+        <button onClick={toggleSidebar}
+                title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+                className="p-2 rounded-full hover:bg-surface-container-high text-on-surface-variant transition-colors">
+          <Icon name={sidebarCollapsed ? 'menu_open' : 'menu'} />
+        </button>
+        <DevicePicker onAddNew={onGotoPonds} />
+      </div>
+
+      <div className="flex items-center gap-2">
+        <button onClick={toggleTheme}
+                title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+                className="p-2 rounded-full hover:bg-surface-container-high text-on-surface-variant transition-colors">
+          <Icon name={theme === 'dark' ? 'light_mode' : 'dark_mode'} />
+        </button>
+        <button className="p-2 rounded-full hover:bg-surface-container-high text-on-surface-variant relative transition-colors">
+          <Icon name="notifications" />
+          <span className="absolute top-1 right-1 w-2 h-2 bg-error rounded-full" />
+        </button>
+        <div className="flex items-center gap-3 ml-2 pl-4 border-l border-outline-variant">
+          <div className="text-right">
+            <p className="text-label-sm text-on-surface">{user?.email}</p>
+            <p className="text-[10px] text-on-surface-variant uppercase font-bold">
+              {isAdmin ? 'Admin' : 'Read-only'}
+            </p>
+          </div>
+          <div className="w-10 h-10 rounded-full bg-primary text-on-primary flex items-center justify-center font-bold border-2 border-secondary">
+            {(user?.email ?? '?').slice(0, 1).toUpperCase()}
+          </div>
         </div>
       </div>
     </header>

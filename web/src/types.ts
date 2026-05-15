@@ -7,8 +7,7 @@ export interface Reading {
   temp: number | null;
   pH: number | null;
   turb: number | null;
-  alert: AlertLevel;        // server-computed (all 3 parameters)
-  deviceAlert?: AlertLevel; // device-reported (temperature only)
+  alert: AlertLevel;
   flags: number;
   pH_mv?: number | null;
   turb_mv?: number | null;
@@ -53,10 +52,22 @@ export interface Thresholds {
   turb: VarThresh;   // *Low ignored on device side
 }
 
-// cal/ph and cal/turb are written directly to Firebase by CalibrationWizard
-// and applied server-side — they are not sent as device commands.
-// cal/temp removed: DS18B20 needs no field calibration.
-export type CommandType = 'threshold' | 'reboot';
+export interface DeviceProfile {
+  name: string;
+  location?: string;
+  species?: string;
+  notes?: string;
+  createdAt?: number;
+  createdBy?: string | null;
+}
+
+export interface DeviceSummary {
+  id: string;
+  profile: DeviceProfile | null;   // null = device exists in DB but unregistered
+  meta: DeviceMeta | null;
+}
+
+export type CommandType = 'cal/ph' | 'cal/turb' | 'cal/temp' | 'threshold' | 'reboot';
 
 export interface CommandRecord {
   type: CommandType;

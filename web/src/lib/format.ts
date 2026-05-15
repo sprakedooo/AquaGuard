@@ -14,9 +14,9 @@ export function relTime(ts?: number | null): string {
 
 export function alertLabel(lvl: number | null | undefined): { text: string; cls: string } {
   switch (lvl) {
-    case 2: return { text: 'CRITICAL', cls: 'bg-crit text-white' };
-    case 1: return { text: 'WARNING',  cls: 'bg-warn text-white' };
-    case 0: return { text: 'NORMAL',   cls: 'bg-ok text-white' };
-    default: return { text: 'NO DATA', cls: 'bg-slate-400 text-white' };
+    case 2: return { text: 'CRITICAL', cls: 'bg-error text-on-error' };
+    case 1: return { text: 'WARNING',  cls: 'bg-amber-500 text-white' };
+    case 0: return { text: 'NORMAL',   cls: 'bg-secondary text-on-secondary' };
+    default: return { text: 'NO DATA', cls: 'bg-surface-container-high text-on-surface-variant' };
   }
 }
